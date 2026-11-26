@@ -1,5 +1,7 @@
 import type {
+  CodeLanguage,
   EventCategory,
+  NoteType,
   TaskPriority,
   TaskStatus,
 } from '@/services/storage/db';
@@ -158,8 +160,25 @@ export interface RemoteAttachmentMetadata {
   readonly updatedAt: ISODateString;
 }
 
+export interface RemoteCloudNoteMetadata {
+  readonly id: EntityId;
+  readonly userId: EntityId;
+  readonly folderId: EntityId | null;
+  readonly title: string;
+  readonly content: string;
+  readonly type: NoteType;
+  readonly language?: CodeLanguage | null;
+  readonly isFavorite: boolean;
+  readonly isDaily: boolean;
+  readonly dailyDate?: string | null;
+  readonly revision: number;
+  readonly createdAt: ISODateString;
+  readonly updatedAt: ISODateString;
+  readonly deletedAt?: ISODateString | null;
+}
+
 export type SyncPlanAction =
-  | { type: 'push_folder'; folderId: string; changeId: string }
+  | { type: 'push_folder'; folderId: string; changeId?: string }
   | { type: 'delete_remote_folder'; folderId: string; changeId: string }
   | { type: 'pull_remote_folder'; folder: RemoteFolderMetadata }
   | { type: 'delete_local_folder'; folderId: string }
@@ -172,6 +191,10 @@ export type SyncPlanAction =
   | { type: 'delete_remote_note'; noteId: string; driveFileId?: string; changeId: string }
   | { type: 'download_remote_note'; mapping: RemoteNoteMappingMetadata }
   | { type: 'delete_local_note'; noteId: string }
+  | { type: 'push_cloud_note'; noteId: string; changeId?: string }
+  | { type: 'delete_remote_cloud_note'; noteId: string; changeId?: string }
+  | { type: 'pull_remote_cloud_note'; note: RemoteCloudNoteMetadata }
+  | { type: 'delete_local_cloud_note'; noteId: string }
   | {
       type: 'record_conflict';
       noteId: string;

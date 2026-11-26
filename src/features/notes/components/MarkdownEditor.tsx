@@ -22,18 +22,30 @@ import {
   syntaxHighlighting,
 } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
-import { Annotation, Compartment, EditorState } from '@codemirror/state';
+import {
+  Annotation,
+  Compartment,
+  EditorState,
+  StateField,
+} from '@codemirror/state';
 import {
   Decoration,
   type DecorationSet,
   EditorView,
   MatchDecorator,
   ViewPlugin,
+  WidgetType,
   type ViewUpdate,
   keymap,
   placeholder as cmPlaceholder,
 } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
+import {
+  createInlineDiagramMarkdown,
+  findExcalidrawBlocks,
+  getCanvasElementCount,
+} from '@/features/notes/utils/canvasNote';
+import { renderExcalidrawSvg } from '@/features/notes/utils/excalidrawSvg';
 import { useTheme } from '@/hooks/useTheme';
 import { buildFolderPathMap, type FolderRecord, type NoteRecord } from '@/services';
 import type { ResolvedTheme } from '@/types/theme';
@@ -50,15 +62,23 @@ export type FormatAction =
   | 'codeblock'
   | 'link'
   | 'table'
-  | 'math';
+  | 'math'
+  | 'diagram';
 
 export interface MarkdownEditorHandle {
   applyFormat: (action: FormatAction) => void;
   insertText: (text: string) => void;
+  replaceRange: (from: number, to: number, text: string) => void;
   focus: () => void;
 }
 
 const programmaticSync = Annotation.define<boolean>();
+
+export interface DiagramEditRequest {
+  readonly from: number;
+  readonly to: number;
+  readonly rawJson: string;
+}
 
 export interface MarkdownEditorProps {
   noteId: string;
@@ -67,6 +87,7 @@ export interface MarkdownEditorProps {
   folders: readonly FolderRecord[];
   onChange: (nextValue: string) => void;
   onTogglePreview: () => void;
+  onEditDiagram?: (request: DiagramEditRequest) => void;
 }
 
 function buildEditorTheme(theme: ResolvedTheme) {
@@ -254,6 +275,164 @@ const tagPlugin = ViewPlugin.fromClass(
   },
 );
 
+class ExcalidrawBlockWidget extends WidgetType {
+  constructor(
+    readonly rawJson: string,
+    readonly from: number,
+    readonly to: number,
+    readonly isDark: boolean,
+    readonly onEdit: (request: DiagramEditRequest) => void,
+  ) {
+    super();
+  }
+
+  override eq(other: ExcalidrawBlockWidget): boolean {
+    return (
+      other.rawJson === this.rawJson &&
+      other.from === this.from &&
+      other.to === this.to &&
+      other.isDark === this.isDark
+    );
+  }
+
+  override ignoreEvent(): boolean {
+    return true;
+  }
+
+  override toDOM(): HTMLElement {
+    const elementCount = getCanvasElementCount(this.rawJson);
+
+    const card = document.createElement('div');
+    card.setAttribute('data-testid', 'inline-diagram-block');
+    card.className =
+      'my-3 overflow-hidden rounded-lg border border-border bg-card/70 [.dark_&]:bg-[#141414] select-none';
+
+    const header = document.createElement('div');
+    header.className =
+      'flex items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5';
+
+    const left = document.createElement('div');
+    left.className = 'flex items-center gap-2 text-xs text-muted-foreground';
+
+    const badge = document.createElement('span');
+    badge.className = 'font-medium text-foreground';
+    badge.textContent = 'Diagram';
+
+    const countSpan = document.createElement('span');
+    countSpan.className = 'font-mono text-[10px] text-muted-foreground';
+    countSpan.textContent = `${elementCount} ${
+      elementCount === 1 ? 'element' : 'elements'
+    }`;
+
+    left.append(badge, countSpan);
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.textContent = 'Edit Diagram';
+    editBtn.className =
+      'inline-flex items-center rounded border border-border bg-background/80 px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer';
+    editBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.onEdit({
+        from: this.from,
+        to: this.to,
+        rawJson: this.rawJson,
+      });
+    });
+
+    header.append(left, editBtn);
+
+    const body = document.createElement('div');
+    body.className =
+      'flex min-h-[120px] items-center justify-center p-3';
+
+    if (elementCount === 0) {
+      const emptyBtn = document.createElement('button');
+      emptyBtn.type = 'button';
+      emptyBtn.className =
+        'flex w-full items-center justify-center rounded-md border border-dashed border-border/80 py-8 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground cursor-pointer';
+      emptyBtn.textContent =
+        'Empty diagram — click Edit Diagram to draw blocks, arrows, or sketches';
+      emptyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.onEdit({
+          from: this.from,
+          to: this.to,
+          rawJson: this.rawJson,
+        });
+      });
+      body.appendChild(emptyBtn);
+    } else {
+      const placeholder = document.createElement('span');
+      placeholder.className = 'py-8 text-xs text-muted-foreground';
+      placeholder.textContent = 'Rendering diagram preview…';
+      body.appendChild(placeholder);
+
+      void renderExcalidrawSvg(this.rawJson, this.isDark)
+        .then((svgMarkup) => {
+          if (!body.isConnected) return;
+          body.innerHTML = '';
+          if (svgMarkup) {
+            const svgWrap = document.createElement('div');
+            svgWrap.className =
+              'flex max-h-[340px] w-full items-center justify-center overflow-hidden';
+            svgWrap.innerHTML = svgMarkup;
+            body.appendChild(svgWrap);
+          }
+        })
+        .catch(() => {
+          if (!body.isConnected) return;
+          body.innerHTML = '';
+          const fallback = document.createElement('span');
+          fallback.className = 'py-8 text-xs text-muted-foreground';
+          fallback.textContent =
+            'Unable to render diagram preview. Click Edit Diagram to inspect.';
+          body.appendChild(fallback);
+        });
+    }
+
+    card.append(header, body);
+    return card;
+  }
+}
+
+function createExcalidrawField(
+  isDark: boolean,
+  onEdit: (request: DiagramEditRequest) => void,
+) {
+  const buildDecorations = (docText: string): DecorationSet => {
+    const blocks = findExcalidrawBlocks(docText);
+    const ranges = blocks.map((block) =>
+      Decoration.replace({
+        widget: new ExcalidrawBlockWidget(
+          block.rawJson,
+          block.from,
+          block.to,
+          isDark,
+          onEdit,
+        ),
+        block: true,
+      }).range(block.from, block.to),
+    );
+    return Decoration.set(ranges, true);
+  };
+
+  return StateField.define<DecorationSet>({
+    create(state) {
+      return buildDecorations(state.doc.toString());
+    },
+    update(deco, tr) {
+      if (!tr.docChanged) return deco;
+      return buildDecorations(tr.newDoc.toString());
+    },
+    provide(field) {
+      return EditorView.decorations.from(field);
+    },
+  });
+}
+
 function wrapSelection(
   view: EditorView,
   before: string,
@@ -300,17 +479,19 @@ export const MarkdownEditor = forwardRef<
   MarkdownEditorHandle,
   MarkdownEditorProps
 >(function MarkdownEditor(
-  { noteId, value, notes, folders, onChange, onTogglePreview },
+  { noteId, value, notes, folders, onChange, onTogglePreview, onEditDiagram },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const themeCompartmentRef = useRef(new Compartment());
   const highlightCompartmentRef = useRef(new Compartment());
+  const diagramCompartmentRef = useRef(new Compartment());
 
   const { resolvedTheme } = useTheme();
   const onChangeRef = useRef(onChange);
   const onTogglePreviewRef = useRef(onTogglePreview);
+  const onEditDiagramRef = useRef(onEditDiagram);
   const notesRef = useRef(notes);
   const foldersRef = useRef(folders);
   const lastEmittedRef = useRef(value);
@@ -318,8 +499,13 @@ export const MarkdownEditor = forwardRef<
 
   onChangeRef.current = onChange;
   onTogglePreviewRef.current = onTogglePreview;
+  onEditDiagramRef.current = onEditDiagram;
   notesRef.current = notes;
   foldersRef.current = folders;
+
+  const invokeEditDiagram = useRef((request: DiagramEditRequest) => {
+    onEditDiagramRef.current?.(request);
+  });
 
   useEffect(() => {
     const host = hostRef.current;
@@ -407,6 +593,12 @@ export const MarkdownEditor = forwardRef<
         }),
         wikiLinkPlugin,
         tagPlugin,
+        diagramCompartmentRef.current.of(
+          createExcalidrawField(
+            resolvedTheme !== 'light',
+            invokeEditDiagram.current,
+          ),
+        ),
         autocompletion({
           override: [wikiLinkCompletionSource],
           activateOnTyping: true,
@@ -471,6 +663,12 @@ export const MarkdownEditor = forwardRef<
         themeCompartmentRef.current.reconfigure(buildEditorTheme(resolvedTheme)),
         highlightCompartmentRef.current.reconfigure(
           syntaxHighlighting(buildHighlightStyle(resolvedTheme)),
+        ),
+        diagramCompartmentRef.current.reconfigure(
+          createExcalidrawField(
+            resolvedTheme !== 'light',
+            invokeEditDiagram.current,
+          ),
         ),
       ],
     });
@@ -547,6 +745,17 @@ export const MarkdownEditor = forwardRef<
           case 'math':
             wrapSelection(view, '$$\n', '\n$$', 'E = mc^2');
             break;
+          case 'diagram': {
+            const { from, to } = view.state.selection.main;
+            const prefix = from > 0 && view.state.sliceDoc(from - 1, from) !== '\n' ? '\n\n' : from > 0 ? '\n' : '';
+            const snippet = `${prefix}${createInlineDiagramMarkdown()}\n`;
+            view.dispatch({
+              changes: { from, to, insert: snippet },
+              selection: { anchor: from + snippet.length },
+            });
+            view.focus();
+            break;
+          }
         }
       },
       insertText: (text) => {
@@ -558,6 +767,16 @@ export const MarkdownEditor = forwardRef<
           selection: { anchor: from + text.length },
         });
         view.focus();
+      },
+      replaceRange: (from, to, text) => {
+        const view = viewRef.current;
+        if (!view) return;
+        const docLen = view.state.doc.length;
+        const safeFrom = Math.max(0, Math.min(from, docLen));
+        const safeTo = Math.max(safeFrom, Math.min(to, docLen));
+        view.dispatch({
+          changes: { from: safeFrom, to: safeTo, insert: text },
+        });
       },
       focus: () => {
         viewRef.current?.focus();

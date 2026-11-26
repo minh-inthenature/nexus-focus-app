@@ -17,11 +17,21 @@ export interface FolderRecord {
   readonly deletedAt?: ISODateString;
 }
 
+export type NoteType = 'markdown' | 'code' | 'canvas';
+export type CodeLanguage =
+  | 'cpp'
+  | 'python'
+  | 'c'
+  | 'typescript'
+  | 'javascript';
+
 export interface NoteRecord {
   readonly id: EntityId;
   readonly folderId: EntityId | null;
   readonly title: string;
   readonly content: string;
+  readonly type?: NoteType;
+  readonly language?: CodeLanguage;
   readonly isFavorite: boolean;
   readonly isDaily: boolean;
   readonly dailyDate?: string;

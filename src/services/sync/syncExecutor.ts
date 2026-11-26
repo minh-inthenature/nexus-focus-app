@@ -8,6 +8,10 @@ import {
   applyRemoteAttachmentUpsert,
   purgeDeletedAttachmentTombstone,
 } from '@/services/storage/attachment.service';
+import type {
+  CodeLanguage,
+  NoteType,
+} from '@/services/storage/db';
 import { db } from '@/services/storage/db';
 import {
   deleteMappingByLocalNoteId,
@@ -51,6 +55,7 @@ import {
 import type {
   RemoteAttachmentMetadata,
   RemoteCalendarEventMetadata,
+  RemoteCloudNoteMetadata,
   RemoteFolderMetadata,
   RemoteNoteMappingMetadata,
   RemoteTaskMetadata,
@@ -117,20 +122,21 @@ export async function executeSyncCycle(
     listActionableChanges(),
   ]);
 
-  // 2. Gather remote Supabase tasks & calendar events (always) and Drive metadata (when connected)
+  // 2. Gather remote Supabase tasks, calendar events, folders, and cloud notes (always when signed in)
+  //    plus Drive metadata when Drive backup is connected
   const [
     { data: taskRows, error: taskErr },
     { data: eventRows, error: eventErr },
-    folderQuery,
+    { data: folderRows, error: folderErr },
+    { data: cloudNoteRows, error: cloudNoteErr },
     mappingQuery,
     attQuery,
     driveFiles,
   ] = await Promise.all([
     client.from('tasks').select('*').eq('user_id', userId),
     client.from('calendar_events').select('*').eq('user_id', userId),
-    includeDriveSync
-      ? client.from('sync_folders').select('*').eq('user_id', userId)
-      : Promise.resolve({ data: [], error: null }),
+    client.from('sync_folders').select('*').eq('user_id', userId),
+    client.from('notes').select('*').eq('user_id', userId),
     includeDriveSync
       ? client.from('drive_note_mappings').select('*').eq('user_id', userId)
       : Promise.resolve({ data: [], error: null }),
@@ -142,26 +148,70 @@ export async function executeSyncCycle(
       : Promise.resolve([]),
   ]);
 
+  if (cloudNoteErr) {
+    const missingTable =
+      cloudNoteErr.code === '42P01' ||
+      cloudNoteErr.code === 'PGRST205' ||
+      /does not exist|schema cache/i.test(cloudNoteErr.message);
+    return {
+      appliedRemoteChanges: false,
+      conflictsRecorded: 0,
+      syncedCount: 0,
+      errorCount: 0,
+      fatalError: missingTable
+        ? 'Cloud notes table missing in Supabase. Run migration 20261126000004_cloud_notes_sync.sql in the Supabase SQL Editor.'
+        : cloudNoteErr.message,
+    };
+  }
+
   if (
     taskErr ||
     eventErr ||
-    folderQuery.error ||
+    folderErr ||
     mappingQuery.error ||
     attQuery.error
   ) {
     throw new Error(
       taskErr?.message ||
         eventErr?.message ||
-        folderQuery.error?.message ||
+        folderErr?.message ||
         mappingQuery.error?.message ||
         attQuery.error?.message ||
         'Failed to read synchronization metadata from Supabase.',
     );
   }
 
-  const folderRows = folderQuery.data;
   const mappingRows = mappingQuery.data;
   const attachmentRows = attQuery.data;
+
+  const remoteCloudNotes: RemoteCloudNoteMetadata[] = (
+    cloudNoteRows ?? []
+  ).map((r) => {
+    const rawType = typeof r.note_type === 'string' ? r.note_type : 'markdown';
+    const resolvedType: NoteType =
+      rawType === 'code' || rawType === 'canvas' ? rawType : 'markdown';
+    const rawLang =
+      typeof r.code_language === 'string'
+        ? (r.code_language as CodeLanguage)
+        : null;
+
+    return {
+      id: String(r.id),
+      userId: String(r.user_id),
+      folderId: typeof r.folder_id === 'string' ? r.folder_id : null,
+      title: String(r.title),
+      content: typeof r.content === 'string' ? r.content : '',
+      type: resolvedType,
+      language: rawLang,
+      isFavorite: Boolean(r.is_favorite),
+      isDaily: Boolean(r.is_daily),
+      dailyDate: typeof r.daily_date === 'string' ? r.daily_date : null,
+      revision: Number(r.revision ?? 1),
+      createdAt: String(r.created_at),
+      updatedAt: String(r.updated_at),
+      deletedAt: typeof r.deleted_at === 'string' ? r.deleted_at : null,
+    };
+  });
 
   const remoteTasks: RemoteTaskMetadata[] = (taskRows ?? []).map((r) => ({
     id: String(r.id),
@@ -271,11 +321,13 @@ export async function executeSyncCycle(
     remoteMappings,
     remoteAttachments,
     driveFiles,
+    remoteCloudNotes,
     localTasks,
     remoteTasks,
     localCalendarEvents,
     remoteCalendarEvents,
     includeDriveSync,
+    includeCloudNotesSync: true,
   });
 
   let appliedRemoteChanges = false;
@@ -296,7 +348,9 @@ export async function executeSyncCycle(
     try {
       switch (action.type) {
         case 'push_folder': {
-          await markChangeSyncing(action.changeId);
+          if (action.changeId) {
+            await markChangeSyncing(action.changeId);
+          }
           const folder = localFolderMap.get(action.folderId);
           if (folder && !folder.deletedAt) {
             const { error } = await client.from('sync_folders').upsert(
@@ -313,7 +367,9 @@ export async function executeSyncCycle(
             );
             if (error) throw new Error(error.message);
           }
-          await markChangeSynced(action.changeId);
+          if (action.changeId) {
+            await markChangeSynced(action.changeId);
+          }
           syncedCount += 1;
           break;
         }
@@ -799,6 +855,90 @@ export async function executeSyncCycle(
         case 'delete_local_note': {
           await applyRemoteNoteDelete(action.noteId);
           await deleteMappingByLocalNoteId(action.noteId);
+          appliedRemoteChanges = true;
+          break;
+        }
+
+        case 'push_cloud_note': {
+          if (action.changeId) {
+            await markChangeSyncing(action.changeId);
+          }
+          const cloudNote = localNoteMap.get(action.noteId);
+          if (cloudNote && !cloudNote.deletedAt) {
+            const { error: cloudErr } = await client.from('notes').upsert(
+              {
+                id: cloudNote.id,
+                user_id: userId,
+                folder_id: cloudNote.folderId,
+                title: cloudNote.title,
+                content: cloudNote.content,
+                note_type: cloudNote.type ?? 'markdown',
+                code_language:
+                  cloudNote.type === 'code'
+                    ? (cloudNote.language ?? 'cpp')
+                    : null,
+                is_favorite: cloudNote.isFavorite,
+                is_daily: cloudNote.isDaily,
+                daily_date: cloudNote.dailyDate ?? null,
+                revision: cloudNote.revision,
+                created_at: cloudNote.createdAt,
+                updated_at: cloudNote.updatedAt,
+                deleted_at: null,
+              },
+              { onConflict: 'user_id,id' },
+            );
+            if (cloudErr) throw new Error(cloudErr.message);
+          }
+          if (action.changeId) {
+            await markChangeSynced(action.changeId);
+          }
+          syncedCount += 1;
+          break;
+        }
+
+        case 'delete_remote_cloud_note': {
+          if (action.changeId) {
+            await markChangeSyncing(action.changeId);
+          }
+          const { error: delCloudErr } = await client
+            .from('notes')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('user_id', userId)
+            .eq('id', action.noteId);
+          if (delCloudErr) throw new Error(delCloudErr.message);
+          if (action.changeId) {
+            await purgeDeletedNoteTombstone(action.noteId);
+            await markChangeSynced(action.changeId);
+          }
+          syncedCount += 1;
+          break;
+        }
+
+        case 'pull_remote_cloud_note': {
+          await applyRemoteNoteUpsert({
+            id: action.note.id,
+            folderId: action.note.folderId,
+            title: action.note.title,
+            content: action.note.content,
+            type: action.note.type,
+            ...(action.note.type === 'code' && action.note.language
+              ? { language: action.note.language }
+              : {}),
+            isFavorite: action.note.isFavorite,
+            isDaily: action.note.isDaily,
+            ...(action.note.dailyDate
+              ? { dailyDate: action.note.dailyDate }
+              : {}),
+            revision: action.note.revision,
+            createdAt: action.note.createdAt,
+            updatedAt: action.note.updatedAt,
+          });
+          appliedRemoteChanges = true;
+          break;
+        }
+
+        case 'delete_local_cloud_note': {
+          await applyRemoteNoteDelete(action.noteId);
           appliedRemoteChanges = true;
           break;
         }

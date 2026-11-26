@@ -1,4 +1,15 @@
 import {
+  createEmptyCanvasScene,
+  isCanvasFileName,
+  serializeCanvasScene,
+} from '@/features/notes/utils/canvasNote';
+import {
+  detectCodeLanguageFromTitle,
+  extractCodeTags,
+  isMarkdownFileName,
+  swapCodeTitleExtension,
+} from '@/features/notes/utils/codeNote';
+import {
   extractTags,
   extractWikiLinks,
   formatDailyNoteDate,
@@ -11,10 +22,12 @@ import {
 import {
   createUuid,
   db,
+  type CodeLanguage,
   type FolderRecord,
   type NoteLinkRecord,
   type NoteRecord,
   type NoteRevisionRecord,
+  type NoteType,
 } from './db';
 import { buildFolderPathMap, ensureFolderHierarchy } from './folders.repository';
 
@@ -22,6 +35,8 @@ export interface CreateNoteInput {
   readonly title?: string;
   readonly folderId?: string | null;
   readonly content?: string;
+  readonly type?: NoteType;
+  readonly language?: CodeLanguage;
   readonly isDaily?: boolean;
   readonly dailyDate?: string;
 }
@@ -82,6 +97,12 @@ async function syncNoteLinksAndTags(
   allNotes: readonly NoteRecord[],
   allFolders: readonly FolderRecord[],
 ): Promise<void> {
+  if (note.type === 'canvas') {
+    await db.note_links.where('sourceNoteId').equals(note.id).delete();
+    await db.note_tags.where('noteId').equals(note.id).delete();
+    return;
+  }
+
   const folderPathMap = buildFolderPathMap(allFolders);
   const previousOutgoing = await db.note_links
     .where('sourceNoteId')
@@ -128,7 +149,10 @@ async function syncNoteLinksAndTags(
     await db.note_links.bulkAdd(newLinks);
   }
 
-  const extractedTags = extractTags(note.content);
+  const extractedTags =
+    note.type === 'code'
+      ? extractCodeTags(note.content)
+      : extractTags(note.content);
   await db.note_tags.where('noteId').equals(note.id).delete();
 
   for (const tagName of extractedTags) {
@@ -249,11 +273,39 @@ export async function createNote(
     ],
     async () => {
       const now = new Date().toISOString();
+      const rawTitle = input.title?.trim();
+      const isCanvas =
+        input.type === 'canvas' ||
+        (!input.type && Boolean(rawTitle && isCanvasFileName(rawTitle)));
+      const detectedLang =
+        isCanvas || !rawTitle ? null : detectCodeLanguageFromTitle(rawTitle);
+      const noteType: NoteType = isCanvas
+        ? 'canvas'
+        : input.type === 'code' || (!input.type && detectedLang !== null)
+          ? 'code'
+          : 'markdown';
+      const noteLanguage: CodeLanguage | undefined =
+        noteType === 'code'
+          ? input.language ?? detectedLang ?? 'cpp'
+          : undefined;
+      const defaultTitle =
+        noteType === 'canvas'
+          ? 'untitled.canvas'
+          : noteType === 'code'
+            ? `untitled.${noteLanguage === 'cpp' ? 'cpp' : noteLanguage === 'python' ? 'py' : noteLanguage === 'typescript' ? 'ts' : noteLanguage === 'javascript' ? 'js' : 'c'}`
+            : 'Untitled Note';
+      const resolvedContent =
+        noteType === 'canvas' && !input.content?.trim()
+          ? serializeCanvasScene(createEmptyCanvasScene())
+          : (input.content ?? '');
+
       const note: NoteRecord = {
         id: createUuid(),
         folderId: input.folderId ?? null,
-        title: input.title?.trim() || 'Untitled Note',
-        content: input.content ?? '',
+        title: rawTitle || defaultTitle,
+        content: resolvedContent,
+        type: noteType,
+        ...(noteLanguage ? { language: noteLanguage } : {}),
         isFavorite: false,
         isDaily: Boolean(input.isDaily),
         ...(input.dailyDate ? { dailyDate: input.dailyDate } : {}),
@@ -420,10 +472,42 @@ export async function renameNote(
         }
       }
 
+      const isCanvasTitle = isCanvasFileName(trimmed);
+      const detectedLang = isCanvasTitle
+        ? null
+        : detectCodeLanguageFromTitle(trimmed);
+      let nextType: NoteType | undefined = existing.type;
+      let nextLanguage: CodeLanguage | undefined = existing.language;
+      let nextContent = updatedSelfContent;
+
+      if (isCanvasTitle) {
+        nextType = 'canvas';
+        nextLanguage = undefined;
+        if (!updatedSelfContent.trim()) {
+          nextContent = serializeCanvasScene(createEmptyCanvasScene());
+        }
+      } else if (detectedLang !== null) {
+        nextType = 'code';
+        nextLanguage = detectedLang;
+      } else if (
+        isMarkdownFileName(trimmed) &&
+        (existing.type === 'code' || existing.type === 'canvas')
+      ) {
+        nextType = 'markdown';
+        nextLanguage = undefined;
+      }
+
+      const baseTarget = { ...existing };
+      if (nextType === 'markdown' || nextType === 'canvas') {
+        delete (baseTarget as { language?: CodeLanguage }).language;
+      }
+
       const nextTarget: NoteRecord = {
-        ...existing,
+        ...baseTarget,
         title: trimmed,
-        content: updatedSelfContent,
+        content: nextContent,
+        ...(nextType ? { type: nextType } : {}),
+        ...(nextLanguage ? { language: nextLanguage } : {}),
         revision: existing.revision + 1,
         updatedAt: now,
       };
@@ -441,6 +525,9 @@ export async function renameNote(
       }
 
       const allNotes = await db.notes.filter((n) => !n.deletedAt).toArray();
+      if (nextType !== existing.type) {
+        await syncNoteLinksAndTags(nextTarget, allNotes, allFolders);
+      }
       await resolveUnresolvedLinksToNote(nextTarget, allNotes, allFolders);
       await appendRevisionSnapshot(nextTarget);
       await enqueueSyncChangeInTx(
@@ -484,6 +571,55 @@ export async function moveNote(
       const next: NoteRecord = {
         ...existing,
         folderId,
+        revision: existing.revision + 1,
+        updatedAt: new Date().toISOString(),
+      };
+      await db.notes.put(next);
+      await enqueueSyncChangeInTx('note', next.id, 'update', next.revision);
+      didWrite = true;
+      return next;
+    },
+  );
+
+  if (didWrite) {
+    notifySyncQueueMutated();
+  }
+  return updated;
+}
+
+/**
+ * Updates a note's type to `'code'` and sets its `language`, automatically
+ * aligning any recognized file extension in the title and bumping revision.
+ */
+export async function updateNoteLanguage(
+  noteId: string,
+  language: CodeLanguage,
+): Promise<NoteRecord> {
+  let didWrite = false;
+
+  const updated = await db.transaction(
+    'rw',
+    [db.notes, db.sync_changes],
+    async () => {
+      const existing = await db.notes.get(noteId);
+      if (!existing || existing.deletedAt) {
+        throw new Error('Note not found.');
+      }
+
+      const nextTitle = swapCodeTitleExtension(existing.title, language);
+      if (
+        existing.type === 'code' &&
+        existing.language === language &&
+        existing.title === nextTitle
+      ) {
+        return existing;
+      }
+
+      const next: NoteRecord = {
+        ...existing,
+        type: 'code',
+        language,
+        title: nextTitle,
         revision: existing.revision + 1,
         updatedAt: new Date().toISOString(),
       };

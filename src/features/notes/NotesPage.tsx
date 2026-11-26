@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import {
   CalendarPlus,
-  FilePlus2,
   FileText,
   PanelLeftOpen,
 } from 'lucide-react';
@@ -10,6 +9,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { LoadingState } from '@/components/common/LoadingState';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
+import { NewNoteMenu } from './components/NewNoteMenu';
 import { NoteEditorWorkspace } from './components/NoteEditorWorkspace';
 import { NotesExplorer } from './components/NotesExplorer';
 import { useNotesStore } from './stores/useNotesStore';
@@ -170,17 +170,14 @@ export function NotesPage() {
                     ? 'Your knowledge vault is empty'
                     : 'Select a note to start writing'
                 }
-                description="Create a Markdown note, open today's daily note, or import existing .md files from your computer. Everything saves locally in IndexedDB."
+                description="Create a Markdown note, Code File (.cpp, .py, .c, .ts, .js), or Canvas drawing, open today's daily note, or import files from your computer."
                 action={
                   <div className="flex flex-wrap items-center justify-center gap-2">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => void createNote()}
-                    >
-                      <FilePlus2 className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span>New Note</span>
-                    </Button>
+                    <NewNoteMenu
+                      variant="button"
+                      label="New Note"
+                      onCreateNote={(input) => createNote(input)}
+                    />
                     <Button
                       variant="outline"
                       size="sm"

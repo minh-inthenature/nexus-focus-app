@@ -84,6 +84,11 @@ export function SyncStatusWidget({ collapsed }: SyncStatusWidgetProps) {
     }
   };
 
+  const tooltipText =
+    status.lastError && (status.state === 'error' || status.failedCount > 0)
+      ? `${label}: ${status.lastError}`
+      : label;
+
   if (collapsed) {
     return (
       <Tooltip delayDuration={250}>
@@ -91,7 +96,7 @@ export function SyncStatusWidget({ collapsed }: SyncStatusWidgetProps) {
           <button
             type="button"
             onClick={handlePrimaryClick}
-            aria-label={`Sync status: ${label}`}
+            aria-label={`Sync status: ${tooltipText}`}
             className="flex h-8 w-full items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors duration-150 hover:bg-black/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring dark:hover:bg-white/5 cursor-pointer"
           >
             <Icon
@@ -105,7 +110,7 @@ export function SyncStatusWidget({ collapsed }: SyncStatusWidgetProps) {
             />
           </button>
         </TooltipTrigger>
-        <TooltipContent side="right">{label}</TooltipContent>
+        <TooltipContent side="right">{tooltipText}</TooltipContent>
       </Tooltip>
     );
   }
@@ -114,6 +119,7 @@ export function SyncStatusWidget({ collapsed }: SyncStatusWidgetProps) {
     <div
       role="status"
       aria-label="Synchronization status"
+      title={tooltipText}
       className="flex h-7 items-center justify-between rounded-lg px-2 text-xs text-sidebar-foreground/70"
     >
       <button

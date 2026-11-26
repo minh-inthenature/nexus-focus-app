@@ -1,6 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Hash, Trash2 } from 'lucide-react';
+import type { CodeDiagnosticsSummary } from '@/features/notes/hooks/useCodeDiagnostics';
 import { useNotesStore } from '@/features/notes/stores/useNotesStore';
+import {
+  getCanvasElementCount,
+  isCanvasNote,
+  replaceExcalidrawBlockAt,
+} from '@/features/notes/utils/canvasNote';
+import {
+  countLinesAndChars,
+  extractCodeTags,
+  getCodeLanguageMeta,
+  getNoteLanguage,
+  isCodeNote,
+} from '@/features/notes/utils/codeNote';
 import {
   countWordsAndChars,
   extractAttachmentIds,
@@ -14,7 +35,10 @@ import {
 } from '@/services';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useDriveStore } from '@/stores/useDriveStore';
+import { cn } from '@/utils/cn';
 import { BacklinksPanel } from './BacklinksPanel';
+import type { CodeNoteEditorHandle } from './CodeNoteEditor';
+import { CodeToolbar } from './CodeToolbar';
 import { DriveConflictDialog } from './DriveConflictDialog';
 import { DrivePanelDialog } from './DrivePanelDialog';
 import { DuplicateLinkDialog } from './DuplicateLinkDialog';
@@ -25,12 +49,46 @@ import { MarkdownEditor, type MarkdownEditorHandle } from './MarkdownEditor';
 import { MarkdownPreview } from './MarkdownPreview';
 import { NoteTopBar } from './NoteTopBar';
 
+const LazyCodeNoteEditor = lazy(() =>
+  import('./CodeNoteEditor').then((m) => ({ default: m.CodeNoteEditor })),
+);
+
+const LazyCanvasNoteEditor = lazy(() =>
+  import('./CanvasNoteEditor').then((m) => ({ default: m.CanvasNoteEditor })),
+);
+
+const LazyExcalidrawModal = lazy(() =>
+  import('./ExcalidrawModal').then((m) => ({ default: m.ExcalidrawModal })),
+);
+
+const INITIAL_DIAGNOSTICS: CodeDiagnosticsSummary = {
+  diagnostics: [],
+  errorCount: 0,
+  warningCount: 0,
+  status: 'ok',
+  source: 'local',
+};
+
+type EditingDiagramState =
+  | {
+      readonly mode: 'edit';
+      readonly from: number;
+      readonly to: number;
+      readonly rawJson: string;
+    }
+  | {
+      readonly mode: 'preview';
+      readonly blockIndex: number;
+      readonly rawJson: string;
+    };
+
 export interface NoteEditorWorkspaceProps {
   note: NoteRecord;
   flushSignalRef: React.MutableRefObject<(() => Promise<void>) | null>;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 450;
+const CANVAS_AUTOSAVE_DEBOUNCE_MS = 800;
 
 /**
  * Orchestrates the active note editor/preview experience, debounced IndexedDB
@@ -56,6 +114,7 @@ export function NoteEditorWorkspace({
     toggleExplorer,
     saveNoteContent,
     renameNote,
+    updateNoteLanguage,
     moveNote,
     toggleFavorite,
     deleteNote,
@@ -72,6 +131,11 @@ export function NoteEditorWorkspace({
     [],
   );
   const [drivePanelOpen, setDrivePanelOpen] = useState(false);
+  const [codeDiagnostics, setCodeDiagnostics] = useState<CodeDiagnosticsSummary>(
+    INITIAL_DIAGNOSTICS,
+  );
+  const [editingDiagram, setEditingDiagram] =
+    useState<EditingDiagramState | null>(null);
   const [ambiguousLink, setAmbiguousLink] = useState<{
     targetTitle: string;
     candidates: readonly NoteRecord[];
@@ -87,6 +151,7 @@ export function NoteEditorWorkspace({
   );
 
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
+  const codeEditorRef = useRef<CodeNoteEditorHandle | null>(null);
   const debounceTimerRef = useRef<number | null>(null);
   const draftRef = useRef<{
     noteId: string;
@@ -187,6 +252,14 @@ export function NoteEditorWorkspace({
     void refreshAttachments();
   }, [refreshAttachments]);
 
+  const canvasMode = isCanvasNote(note);
+  const codeMode = !canvasMode && isCodeNote(note);
+  const codeLanguage = getNoteLanguage(note);
+  const codeLangMeta = useMemo(
+    () => getCodeLanguageMeta(codeLanguage),
+    [codeLanguage],
+  );
+
   const handleEditorChange = useCallback(
     (nextValue: string) => {
       setDraftContent(nextValue);
@@ -200,12 +273,15 @@ export function NoteEditorWorkspace({
       if (debounceTimerRef.current !== null) {
         window.clearTimeout(debounceTimerRef.current);
       }
+      const delay = canvasMode
+        ? CANVAS_AUTOSAVE_DEBOUNCE_MS
+        : AUTOSAVE_DEBOUNCE_MS;
       debounceTimerRef.current = window.setTimeout(() => {
         debounceTimerRef.current = null;
         void flushPendingSave();
-      }, AUTOSAVE_DEBOUNCE_MS);
+      }, delay);
     },
-    [note.id, setSaveStatus, flushPendingSave],
+    [note.id, canvasMode, setSaveStatus, flushPendingSave],
   );
 
   const handleAttachFiles = async (files: FileList) => {
@@ -258,13 +334,29 @@ export function NoteEditorWorkspace({
   };
 
   const metrics = useMemo(() => countWordsAndChars(draftContent), [draftContent]);
-  const noteTags = useMemo(() => extractTags(draftContent), [draftContent]);
+  const lineMetrics = useMemo(
+    () => (codeMode ? countLinesAndChars(draftContent) : null),
+    [codeMode, draftContent],
+  );
+  const canvasElementCount = useMemo(
+    () => (canvasMode ? getCanvasElementCount(draftContent) : 0),
+    [canvasMode, draftContent],
+  );
+  const noteTags = useMemo(
+    () =>
+      canvasMode
+        ? []
+        : codeMode
+          ? extractCodeTags(draftContent)
+          : extractTags(draftContent),
+    [canvasMode, codeMode, draftContent],
+  );
 
   const unusedAttachments = useMemo(() => {
-    if (noteAttachments.length === 0) return [];
+    if (canvasMode || codeMode || noteAttachments.length === 0) return [];
     const activeIds = new Set(extractAttachmentIds(draftContent));
     return noteAttachments.filter((att) => !activeIds.has(att.id));
-  }, [noteAttachments, draftContent]);
+  }, [canvasMode, codeMode, noteAttachments, draftContent]);
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-background">
@@ -308,58 +400,128 @@ export function NoteEditorWorkspace({
         }}
       />
 
-      {editorMode === 'edit' ? (
+      {canvasMode ? null : codeMode ? (
+        <CodeToolbar
+          language={codeLanguage}
+          code={draftContent}
+          diagnostics={codeDiagnostics}
+          onChangeLanguage={(nextLang) => {
+            void flushPendingSave().then(() =>
+              updateNoteLanguage(note.id, nextLang),
+            );
+          }}
+          onJumpToLocation={(line, column) =>
+            codeEditorRef.current?.jumpToLocation(line, column)
+          }
+        />
+      ) : editorMode === 'edit' ? (
         <EditorToolbar
           onFormat={(action) => editorRef.current?.applyFormat(action)}
           onAttachFiles={(files) => void handleAttachFiles(files)}
         />
       ) : null}
 
-      {/* Main Editor / Preview Scrollable Surface */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 py-4 md:px-10">
-          {noteTags.length > 0 ? (
-            <div
-              aria-label="Note tags"
-              className="mb-2 flex flex-wrap items-center gap-1.5"
-            >
-              {noteTags.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => setSelectedTag(tag)}
-                  className="inline-flex items-center gap-0.5 rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
-                >
-                  <Hash className="h-2.5 w-2.5" aria-hidden="true" />
-                  <span>{tag}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {editorMode === 'edit' ? (
-            <MarkdownEditor
-              ref={editorRef}
+      {/* Main Editor / Preview / Canvas Surface */}
+      {canvasMode ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background [.dark_&]:bg-[#141414]">
+          <Suspense
+            fallback={
+              <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+                Loading canvas editor…
+              </div>
+            }
+          >
+            <LazyCanvasNoteEditor
               noteId={note.id}
               value={draftContent}
-              notes={notes}
-              folders={folders}
               onChange={handleEditorChange}
-              onTogglePreview={() => {
-                void flushPendingSave();
-                toggleEditorMode();
-              }}
             />
-          ) : (
-            <MarkdownPreview
-              content={draftContent}
-              resolveWikiLink={resolveWikiLinkTargets}
-              onOpenWikiLink={(target) => void handleOpenWikiLink(target)}
-              onClickTag={(tag) => setSelectedTag(tag)}
-            />
-          )}
+          </Suspense>
         </div>
-      </div>
+      ) : (
+        <div
+          className={cn(
+            'flex-1 overflow-y-auto',
+            codeMode && '[.dark_&]:bg-[#141414]',
+          )}
+        >
+          <div
+            className={cn(
+              'flex min-h-full w-full flex-col',
+              codeMode
+                ? 'px-2 py-2 md:px-4'
+                : 'max-w-4xl px-6 py-4 md:pl-12 md:pr-16',
+            )}
+          >
+            {noteTags.length > 0 ? (
+              <div
+                aria-label="Note tags"
+                className={cn(
+                  'mb-2 flex flex-wrap items-center gap-1.5',
+                  codeMode && 'px-2 pt-1',
+                )}
+              >
+                {noteTags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setSelectedTag(tag)}
+                    className="inline-flex items-center gap-0.5 rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+                  >
+                    <Hash className="h-2.5 w-2.5" aria-hidden="true" />
+                    <span>{tag}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {codeMode ? (
+              <Suspense
+                fallback={
+                  <div className="flex h-[460px] items-center justify-center text-xs text-muted-foreground">
+                    Loading code editor…
+                  </div>
+                }
+              >
+                <LazyCodeNoteEditor
+                  ref={codeEditorRef}
+                  noteId={note.id}
+                  value={draftContent}
+                  language={codeLanguage}
+                  onChange={handleEditorChange}
+                  onDiagnosticsChange={setCodeDiagnostics}
+                />
+              </Suspense>
+            ) : editorMode === 'edit' ? (
+              <MarkdownEditor
+                ref={editorRef}
+                noteId={note.id}
+                value={draftContent}
+                notes={notes}
+                folders={folders}
+                onChange={handleEditorChange}
+                onTogglePreview={() => {
+                  void flushPendingSave();
+                  toggleEditorMode();
+                }}
+                onEditDiagram={(request) =>
+                  setEditingDiagram({ mode: 'edit', ...request })
+                }
+              />
+            ) : (
+              <MarkdownPreview
+                content={draftContent}
+                resolveWikiLink={resolveWikiLinkTargets}
+                onOpenWikiLink={(target) => void handleOpenWikiLink(target)}
+                onClickTag={(tag) => setSelectedTag(tag)}
+                onEditDiagramBlock={(blockIndex, rawJson) =>
+                  setEditingDiagram({ mode: 'preview', blockIndex, rawJson })
+                }
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Careful unused attachments notice */}
       {unusedAttachments.length > 0 ? (
@@ -398,8 +560,28 @@ export function NoteEditorWorkspace({
       {/* Footer Metrics */}
       <footer className="flex items-center justify-between border-t border-border bg-background px-6 py-1.5 text-[11px] text-muted-foreground md:px-10">
         <div className="flex items-center gap-4">
-          <span>{metrics.words} words</span>
-          <span>{metrics.chars} chars</span>
+          {canvasMode ? (
+            <>
+              <span>
+                {canvasElementCount}{' '}
+                {canvasElementCount === 1 ? 'element' : 'elements'}
+              </span>
+              <span className="font-mono text-muted-foreground/80">Canvas</span>
+            </>
+          ) : codeMode && lineMetrics ? (
+            <>
+              <span>{lineMetrics.lines} lines</span>
+              <span>{lineMetrics.chars} chars</span>
+              <span className="font-mono text-muted-foreground/80">
+                {codeLangMeta.label}
+              </span>
+            </>
+          ) : (
+            <>
+              <span>{metrics.words} words</span>
+              <span>{metrics.chars} chars</span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-4 font-mono">
           <span>rev {note.revision}</span>
@@ -411,6 +593,34 @@ export function NoteEditorWorkspace({
           </span>
         </div>
       </footer>
+
+      {editingDiagram ? (
+        <Suspense fallback={null}>
+          <LazyExcalidrawModal
+            open
+            initialRawJson={editingDiagram.rawJson}
+            onSave={(nextRawJson) => {
+              if (editingDiagram.mode === 'edit') {
+                const replacement = `\`\`\`excalidraw\n${nextRawJson}\n\`\`\``;
+                editorRef.current?.replaceRange(
+                  editingDiagram.from,
+                  editingDiagram.to,
+                  replacement,
+                );
+              } else {
+                const nextDoc = replaceExcalidrawBlockAt(
+                  draftContent,
+                  editingDiagram.blockIndex,
+                  nextRawJson,
+                );
+                handleEditorChange(nextDoc);
+              }
+              window.setTimeout(() => void flushPendingSave(), 20);
+            }}
+            onClose={() => setEditingDiagram(null)}
+          />
+        </Suspense>
+      ) : null}
 
       <DuplicateLinkDialog
         open={Boolean(ambiguousLink)}

@@ -1,4 +1,16 @@
 import {
+  createEmptyCanvasScene,
+  isCanvasFileName,
+  isCanvasNote,
+  serializeCanvasScene,
+} from '@/features/notes/utils/canvasNote';
+import {
+  detectCodeLanguageFromTitle,
+  getCodeLanguageMeta,
+  getNoteLanguage,
+  isCodeNote,
+} from '@/features/notes/utils/codeNote';
+import {
   extractAttachmentIds,
   sanitizeFileName,
 } from '@/features/notes/utils/markdown';
@@ -19,6 +31,8 @@ export interface ImportResult {
 const IMAGE_OR_ATTACHMENT_EXT_RE =
   /\.(png|jpe?g|gif|webp|svg|bmp|ico|pdf|txt|csv)$/i;
 const MARKDOWN_EXT_RE = /\.(md|markdown)$/i;
+const IMPORTABLE_TEXT_EXT_RE =
+  /\.(md|markdown|canvas|draw|excalidraw|cpp|cc|cxx|hpp|hh|hxx|c|h|py|pyw|ts|tsx|mts|cts|js|jsx|mjs|cjs)$/i;
 
 function triggerDownload(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
@@ -58,7 +72,31 @@ function getUniqueRelativePath(
  * Exports a single note as a standard `.md` file.
  */
 export function exportNoteAsMarkdown(note: NoteRecord): void {
-  const safeName = `${sanitizeFileName(note.title)}.md`;
+  const safeBase = sanitizeFileName(note.title);
+  if (isCanvasNote(note)) {
+    const fileName = isCanvasFileName(safeBase)
+      ? safeBase
+      : `${safeBase}.canvas`;
+    const blob = new Blob([note.content], {
+      type: 'application/json;charset=utf-8',
+    });
+    triggerDownload(blob, fileName);
+    return;
+  }
+
+  if (isCodeNote(note)) {
+    const lang = getNoteLanguage(note);
+    const meta = getCodeLanguageMeta(lang);
+    const hasCodeExt = detectCodeLanguageFromTitle(safeBase) !== null;
+    const fileName = hasCodeExt ? safeBase : `${safeBase}${meta.ext}`;
+    const blob = new Blob([note.content], {
+      type: 'text/plain;charset=utf-8',
+    });
+    triggerDownload(blob, fileName);
+    return;
+  }
+
+  const safeName = `${safeBase}.md`;
   const blob = new Blob([note.content], {
     type: 'text/markdown;charset=utf-8',
   });
@@ -116,27 +154,44 @@ export async function exportVaultAsZip(): Promise<void> {
       : [];
 
     const noteTitle = sanitizeFileName(note.title);
+    let archiveFileName: string;
+    if (isCanvasNote(note)) {
+      archiveFileName = isCanvasFileName(noteTitle)
+        ? noteTitle
+        : `${noteTitle}.canvas`;
+    } else if (isCodeNote(note)) {
+      const langMeta = getCodeLanguageMeta(getNoteLanguage(note));
+      archiveFileName =
+        detectCodeLanguageFromTitle(noteTitle) !== null
+          ? noteTitle
+          : `${noteTitle}${langMeta.ext}`;
+    } else {
+      archiveFileName = `${noteTitle}.md`;
+    }
+
     const rawNotePath =
       folderSegments.length > 0
-        ? `${folderSegments.join('/')}/${noteTitle}.md`
-        : `${noteTitle}.md`;
+        ? `${folderSegments.join('/')}/${archiveFileName}`
+        : archiveFileName;
     const uniqueNotePath = getUniqueRelativePath(rawNotePath, usedPaths);
 
     const depth = folderSegments.length;
     const relativePrefix = depth > 0 ? '../'.repeat(depth) : './';
-    let markdown = note.content;
-    const referencedIds = extractAttachmentIds(markdown);
-    for (const attachmentId of referencedIds) {
-      const zipPath = attachmentZipPaths.get(attachmentId);
-      if (zipPath) {
-        markdown = markdown.replaceAll(
-          `nexus-attachment://${attachmentId}`,
-          `${relativePrefix}${zipPath}`,
-        );
+    let fileContent = note.content;
+    if (!isCodeNote(note) && !isCanvasNote(note)) {
+      const referencedIds = extractAttachmentIds(fileContent);
+      for (const attachmentId of referencedIds) {
+        const zipPath = attachmentZipPaths.get(attachmentId);
+        if (zipPath) {
+          fileContent = fileContent.replaceAll(
+            `nexus-attachment://${attachmentId}`,
+            `${relativePrefix}${zipPath}`,
+          );
+        }
       }
     }
 
-    zip.file(uniqueNotePath, markdown);
+    zip.file(uniqueNotePath, fileContent);
   }
 
   const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -151,16 +206,18 @@ function getRelativePathSegments(file: File): string[] {
 }
 
 /**
- * Imports single or multiple Markdown files (and optional nested folders and
- * accompanying attachment files) into IndexedDB.
+ * Imports single or multiple Markdown, Canvas, or source code files (and
+ * optional nested folders and accompanying attachment files) into IndexedDB.
  */
 export async function importMarkdownFiles(
   fileList: FileList | readonly File[],
 ): Promise<ImportResult> {
   const files = Array.from(fileList);
-  const markdownFiles = files.filter((f) => MARKDOWN_EXT_RE.test(f.name));
+  const textFiles = files.filter((f) => IMPORTABLE_TEXT_EXT_RE.test(f.name));
   const assetFiles = files.filter(
-    (f) => !MARKDOWN_EXT_RE.test(f.name) && IMAGE_OR_ATTACHMENT_EXT_RE.test(f.name),
+    (f) =>
+      !IMPORTABLE_TEXT_EXT_RE.test(f.name) &&
+      IMAGE_OR_ATTACHMENT_EXT_RE.test(f.name),
   );
 
   const importedNotes: NoteRecord[] = [];
@@ -179,16 +236,23 @@ export async function importMarkdownFiles(
   const existingNotes = await listNotes();
   const folderPathMap = buildFolderPathMap(await listFolders());
 
-  for (const mdFile of markdownFiles) {
-    const rawText = await mdFile.text();
-    const pathSegments = getRelativePathSegments(mdFile);
+  for (const textFile of textFiles) {
+    const rawText = await textFile.text();
+    const pathSegments = getRelativePathSegments(textFile);
     const folderSegments = pathSegments.slice(0, -1);
     const folderId =
       folderSegments.length > 0
         ? await ensureFolderHierarchy(folderSegments)
         : null;
 
-    const rawTitle = mdFile.name.replace(MARKDOWN_EXT_RE, '').trim() || 'Imported Note';
+    const isCanvas = isCanvasFileName(textFile.name);
+    const detectedLang = isCanvas ? null : detectCodeLanguageFromTitle(textFile.name);
+    const isMarkdown =
+      !isCanvas &&
+      (MARKDOWN_EXT_RE.test(textFile.name) || detectedLang === null);
+    const rawTitle = isMarkdown
+      ? textFile.name.replace(MARKDOWN_EXT_RE, '').trim() || 'Imported Note'
+      : textFile.name.trim() || 'untitled';
 
     // Handle duplicate titles inside the exact same destination folder safely
     const siblingsInFolder = existingNotes.filter(
@@ -201,16 +265,36 @@ export async function importMarkdownFiles(
         (n) => n.title.toLowerCase() === finalTitle.toLowerCase(),
       )
     ) {
-      finalTitle = `${rawTitle} (${suffix})`;
+      if (!isMarkdown && (detectedLang || isCanvas)) {
+        const dotIdx = rawTitle.lastIndexOf('.');
+        const stem = dotIdx > 0 ? rawTitle.slice(0, dotIdx) : rawTitle;
+        const ext = dotIdx > 0 ? rawTitle.slice(dotIdx) : '';
+        finalTitle = `${stem} (${suffix})${ext}`;
+      } else {
+        finalTitle = `${rawTitle} (${suffix})`;
+      }
       suffix += 1;
     }
 
     const createdNote = await createNote({
       title: finalTitle,
       folderId,
-      content: rawText,
+      content:
+        isCanvas && !rawText.trim()
+          ? serializeCanvasScene(createEmptyCanvasScene())
+          : rawText,
+      ...(isCanvas
+        ? { type: 'canvas' as const }
+        : detectedLang
+          ? { type: 'code' as const, language: detectedLang }
+          : {}),
     });
     existingNotes.push(createdNote);
+
+    if (detectedLang || isCanvas) {
+      importedNotes.push(createdNote);
+      continue;
+    }
 
     // Import referenced relative images/attachments if included in selection
     let updatedMarkdown = rawText;

@@ -11,6 +11,7 @@ import {
   ListOrdered,
   Paperclip,
   Quote,
+  Shapes,
   Sigma,
   Table2,
   type LucideIcon,
@@ -48,6 +49,7 @@ const BLOCK_ACTIONS: readonly ToolbarAction[] = [
   { action: 'link', label: 'Link', icon: Link2 },
   { action: 'table', label: 'Table', icon: Table2 },
   { action: 'math', label: 'Math equation', icon: Sigma },
+  { action: 'diagram', label: 'Insert Diagram / Sketch', icon: Shapes },
 ];
 
 function ToolbarButton({

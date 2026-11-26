@@ -3,26 +3,35 @@ import {
   Archive,
   CalendarPlus,
   Clock,
-  FilePlus2,
+  FileCode2,
   FileText,
   FolderOpen,
   FolderPlus,
   Hash,
   Search,
+  Shapes,
   Star,
   Upload,
   X,
 } from 'lucide-react';
 import { useNotesStore } from '@/features/notes/stores/useNotesStore';
+import { isCanvasNote } from '@/features/notes/utils/canvasNote';
+import {
+  getCodeLanguageMeta,
+  getNoteLanguage,
+  isCodeNote,
+} from '@/features/notes/utils/codeNote';
 import { searchNotes } from '@/features/notes/utils/search';
 import {
   buildFolderPathMap,
   exportVaultAsZip,
+  type CreateNoteInput,
   type FolderRecord,
 } from '@/services';
 import { cn } from '@/utils/cn';
 import { DeleteFolderDialog } from './DeleteFolderDialog';
 import { FolderTree } from './FolderTree';
+import { NewNoteMenu } from './NewNoteMenu';
 
 type ExplorerTab = 'files' | 'tags' | 'recent' | 'favorites';
 
@@ -143,9 +152,15 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
     await setActiveNoteId(noteId);
   };
 
-  const handleCreateNote = async (folderId: string | null = null) => {
+  const handleCreateNote = async (
+    inputOrFolderId: CreateNoteInput | string | null = null,
+  ) => {
     await onBeforeSelectNote();
-    await createNote({ folderId });
+    if (typeof inputOrFolderId === 'string' || inputOrFolderId === null) {
+      await createNote({ folderId: inputOrFolderId });
+      return;
+    }
+    await createNote(inputOrFolderId);
   };
 
   const handleOpenToday = async () => {
@@ -201,15 +216,10 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
           Vault
         </span>
         <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => void handleCreateNote(null)}
-            title="New note"
-            aria-label="New note"
-            className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer"
-          >
-            <FilePlus2 className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+          <NewNoteMenu
+            onCreateNote={(input) => handleCreateNote(input)}
+            align="left"
+          />
           <button
             type="button"
             onClick={() => {
@@ -234,8 +244,8 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            title="Import Markdown files"
-            aria-label="Import Markdown files"
+            title="Import Markdown, code, or canvas files"
+            aria-label="Import Markdown, code, or canvas files"
             className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer"
           >
             <Upload className="h-3.5 w-3.5" aria-hidden="true" />
@@ -264,7 +274,7 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".md,.markdown,image/*"
+          accept=".md,.markdown,.canvas,.draw,.excalidraw,.cpp,.cc,.c,.h,.hpp,.py,.ts,.tsx,.js,.jsx,image/*"
           onChange={(e) => void handleImportChange(e)}
           className="hidden"
           aria-hidden="true"
@@ -403,38 +413,65 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
                 No matching notes found.
               </p>
             ) : (
-              searchResults.map((result) => (
-                <button
-                  key={result.note.id}
-                  type="button"
-                  onClick={() => void handleSelectNote(result.note.id)}
-                  className={cn(
-                    'w-full rounded-md border border-transparent px-2.5 py-2 text-left transition-colors cursor-pointer',
-                    result.note.id === activeNoteId
-                      ? 'border-border bg-accent text-accent-foreground'
-                      : 'hover:bg-accent/60',
-                  )}
-                >
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                    <FileText
-                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <span className="truncate">
+              searchResults.map((result) => {
+                const isCanvas = isCanvasNote(result.note);
+                const codeMeta = isCodeNote(result.note)
+                  ? getCodeLanguageMeta(getNoteLanguage(result.note))
+                  : null;
+                return (
+                  <button
+                    key={result.note.id}
+                    type="button"
+                    onClick={() => void handleSelectNote(result.note.id)}
+                    className={cn(
+                      'w-full rounded-md border border-transparent px-2.5 py-2 text-left transition-colors cursor-pointer',
+                      result.note.id === activeNoteId
+                        ? 'border-border bg-accent text-accent-foreground'
+                        : 'hover:bg-accent/60',
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                      {isCanvas ? (
+                        <Shapes
+                          className="h-3.5 w-3.5 shrink-0 text-primary/85"
+                          aria-hidden="true"
+                        />
+                      ) : codeMeta ? (
+                        <FileCode2
+                          className="h-3.5 w-3.5 shrink-0 text-primary/85"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <FileText
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span className="min-w-0 flex-1 truncate">
+                        <HighlightMatch
+                          text={result.note.title}
+                          query={searchQuery}
+                        />
+                      </span>
+                      {isCanvas ? (
+                        <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
+                          CANVAS
+                        </span>
+                      ) : codeMeta ? (
+                        <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
+                          {codeMeta.badge}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
                       <HighlightMatch
-                        text={result.note.title}
+                        text={isCanvas ? 'Excalidraw visual canvas' : result.snippet}
                         query={searchQuery}
                       />
-                    </span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
-                    <HighlightMatch
-                      text={result.snippet}
-                      query={searchQuery}
-                    />
-                  </p>
-                </button>
-              ))
+                    </p>
+                  </button>
+                );
+              })
             )}
           </div>
         ) : activeTab === 'files' ? (
@@ -513,30 +550,57 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
                 No recently modified notes yet.
               </p>
             ) : (
-              recentNotes.map((note) => (
-                <button
-                  key={note.id}
-                  type="button"
-                  onClick={() => void handleSelectNote(note.id)}
-                  className={cn(
-                    'flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer',
-                    note.id === activeNoteId
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-sidebar-foreground/85 hover:bg-accent/60',
-                  )}
-                >
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <Clock
-                      className="h-3 w-3 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <span className="truncate">{note.title}</span>
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                    {note.updatedAt.slice(5, 10)}
-                  </span>
-                </button>
-              ))
+              recentNotes.map((note) => {
+                const isCanvas = isCanvasNote(note);
+                const codeMeta = isCodeNote(note)
+                  ? getCodeLanguageMeta(getNoteLanguage(note))
+                  : null;
+                return (
+                  <button
+                    key={note.id}
+                    type="button"
+                    onClick={() => void handleSelectNote(note.id)}
+                    className={cn(
+                      'flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer',
+                      note.id === activeNoteId
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-sidebar-foreground/85 hover:bg-accent/60',
+                    )}
+                  >
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                      {isCanvas ? (
+                        <Shapes
+                          className="h-3 w-3 shrink-0 text-primary/85"
+                          aria-hidden="true"
+                        />
+                      ) : codeMeta ? (
+                        <FileCode2
+                          className="h-3 w-3 shrink-0 text-primary/85"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Clock
+                          className="h-3 w-3 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span className="min-w-0 flex-1 truncate">{note.title}</span>
+                      {isCanvas ? (
+                        <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
+                          CANVAS
+                        </span>
+                      ) : codeMeta ? (
+                        <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
+                          {codeMeta.badge}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                      {note.updatedAt.slice(5, 10)}
+                    </span>
+                  </button>
+                );
+              })
             )}
           </div>
         ) : (
@@ -546,25 +610,40 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
                 No favorite notes yet.
               </p>
             ) : (
-              favoriteNotes.map((note) => (
-                <button
-                  key={note.id}
-                  type="button"
-                  onClick={() => void handleSelectNote(note.id)}
-                  className={cn(
-                    'flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer',
-                    note.id === activeNoteId
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-sidebar-foreground/85 hover:bg-accent/60',
-                  )}
-                >
-                  <Star
-                    className="h-3 w-3 shrink-0 fill-current text-amber-500"
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{note.title}</span>
-                </button>
-              ))
+              favoriteNotes.map((note) => {
+                const isCanvas = isCanvasNote(note);
+                const codeMeta = isCodeNote(note)
+                  ? getCodeLanguageMeta(getNoteLanguage(note))
+                  : null;
+                return (
+                  <button
+                    key={note.id}
+                    type="button"
+                    onClick={() => void handleSelectNote(note.id)}
+                    className={cn(
+                      'flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer',
+                      note.id === activeNoteId
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-sidebar-foreground/85 hover:bg-accent/60',
+                    )}
+                  >
+                    <Star
+                      className="h-3 w-3 shrink-0 fill-current text-amber-500"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{note.title}</span>
+                    {isCanvas ? (
+                      <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
+                        CANVAS
+                      </span>
+                    ) : codeMeta ? (
+                      <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
+                        {codeMeta.badge}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })
             )}
           </div>
         )}

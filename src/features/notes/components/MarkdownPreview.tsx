@@ -1,19 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
+import { isValidElement, useEffect, useMemo, useState, type ReactNode } from 'react';
 import 'katex/dist/katex.min.css';
 import { FileDown, Paperclip } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import { findExcalidrawBlocks } from '@/features/notes/utils/canvasNote';
 import { attachmentService, type NoteRecord } from '@/services';
 import type { WikiLinkResolution } from '@/features/notes/stores/useNotesStore';
 import { cn } from '@/utils/cn';
+import { InlineDiagramCard } from './InlineDiagramCard';
 
 export interface MarkdownPreviewProps {
   content: string;
   resolveWikiLink: (target: string) => WikiLinkResolution;
   onOpenWikiLink: (target: string) => void;
   onClickTag: (tagName: string) => void;
+  onEditDiagramBlock?: (blockIndex: number, rawJson: string) => void;
 }
 
 const SAFE_URL_PROTOCOLS = /^(https?:|mailto:|tel:|nexus-wikilink:|nexus-tag:|nexus-attachment:)/i;
@@ -197,6 +200,7 @@ export function MarkdownPreview({
   resolveWikiLink,
   onOpenWikiLink,
   onClickTag,
+  onEditDiagramBlock,
 }: MarkdownPreviewProps) {
   const transformed = useMemo(
     () => transformWikiLinksAndTags(content),
@@ -218,6 +222,40 @@ export function MarkdownPreview({
         rehypePlugins={[rehypeKatex]}
         urlTransform={safeUrlTransform}
         components={{
+          pre: ({ node, children }) => {
+            const firstChild = Array.isArray(children) ? children[0] : children;
+            if (
+              isValidElement<{ className?: string; children?: ReactNode }>(
+                firstChild,
+              ) &&
+              typeof firstChild.props.className === 'string' &&
+              firstChild.props.className.includes('language-excalidraw')
+            ) {
+              const rawJson = String(firstChild.props.children ?? '').trim();
+              const blockLine = node?.position?.start.line;
+              const allBlocks = findExcalidrawBlocks(content);
+              const matchedBlock =
+                (blockLine !== undefined
+                  ? allBlocks.find((b) => {
+                      const lineStart = content
+                        .slice(0, b.from)
+                        .split('\n').length;
+                      return lineStart === blockLine;
+                    })
+                  : undefined) ??
+                allBlocks.find((b) => b.rawJson === rawJson);
+              const blockIdx = matchedBlock?.index ?? 0;
+
+              return (
+                <InlineDiagramCard
+                  rawJson={rawJson}
+                  onEdit={() => onEditDiagramBlock?.(blockIdx, rawJson)}
+                />
+              );
+            }
+
+            return <pre>{children}</pre>;
+          },
           a: ({ href, children }) => {
             if (href?.startsWith('nexus-wikilink://')) {
               const target = safeDecodeURIComponent(

@@ -331,3 +331,32 @@
   overflow-y: hidden;
   padding: 0.25rem 0;
 }
+
+/* Excalidraw integration matched seamlessly to Vault dark/light/forest surfaces */
+.nexus-excalidraw .excalidraw {
+  --default-bg-color: var(--background);
+  --island-bg-color: var(--card);
+  --popup-bg-color: var(--popover);
+  --default-border-color: var(--border);
+}
+
+.nexus-excalidraw .excalidraw.theme--dark {
+  --default-bg-color: #141414;
+  --input-bg-color: #141414;
+  --island-bg-color: #191919;
+  --popup-bg-color: #191919;
+  --popup-secondary-bg-color: #1f1e1c;
+  --button-gray-1: #272623;
+  --button-gray-2: #1f1e1c;
+  --button-gray-3: #191919;
+  --default-border-color: rgba(236, 234, 228, 0.08);
+  --color-primary: #d97757;
+  --color-primary-darker: #c86445;
+  --color-primary-darkest: #b85739;
+  --color-primary-light: rgba(217, 119, 87, 0.22);
+  --color-primary-hover: #e58869;
+}
+
+.nexus-excalidraw .excalidraw .App-menu_top .buttonList {
+  gap: 2px;
+}

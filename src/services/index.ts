@@ -4,6 +4,7 @@ export {
   NexusDatabase,
   type AttachmentRecord,
   type CalendarEventRecord,
+  type CodeLanguage,
   type DriveNoteMappingRecord,
   type EventCategory,
   type FolderRecord,
@@ -11,6 +12,7 @@ export {
   type NoteRecord,
   type NoteRevisionRecord,
   type NoteTagRecord,
+  type NoteType,
   type TagRecord,
   type TaskPriority,
   type TaskRecord,
@@ -126,6 +128,7 @@ export {
   renameNote,
   toggleFavoriteNote,
   updateNoteContent,
+  updateNoteLanguage,
   type CreateNoteInput,
   type TagWithCount,
 } from './storage/notes.repository';
@@ -209,6 +212,7 @@ export {
 export type {
   RemoteAttachmentMetadata,
   RemoteCalendarEventMetadata,
+  RemoteCloudNoteMetadata,
   RemoteFolderMetadata,
   RemoteNoteMappingMetadata,
   RemoteTaskMetadata,

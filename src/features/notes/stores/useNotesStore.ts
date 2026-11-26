@@ -18,6 +18,8 @@ import {
   renameNote as repoRenameNote,
   toggleFavoriteNote as repoToggleFavoriteNote,
   updateNoteContent as repoUpdateNoteContent,
+  updateNoteLanguage as repoUpdateNoteLanguage,
+  type CodeLanguage,
   type CreateNoteInput,
   type DeleteFolderMode,
   type FolderRecord,
@@ -72,6 +74,7 @@ interface NotesStoreState {
   createNote: (input?: CreateNoteInput) => Promise<NoteRecord>;
   saveNoteContent: (noteId: string, content: string) => Promise<NoteRecord>;
   renameNote: (noteId: string, newTitle: string) => Promise<NoteRecord>;
+  updateNoteLanguage: (noteId: string, language: CodeLanguage) => Promise<NoteRecord>;
   moveNote: (noteId: string, folderId: string | null) => Promise<NoteRecord>;
   toggleFavorite: (noteId: string) => Promise<NoteRecord>;
   deleteNote: (noteId: string) => Promise<void>;
@@ -250,6 +253,12 @@ export const useNotesStore = create<NotesStoreState>()(
 
       renameNote: async (noteId, newTitle) => {
         const updated = await repoRenameNote(noteId, newTitle);
+        await get().refreshVault();
+        return updated;
+      },
+
+      updateNoteLanguage: async (noteId, language) => {
+        const updated = await repoUpdateNoteLanguage(noteId, language);
         await get().refreshVault();
         return updated;
       },

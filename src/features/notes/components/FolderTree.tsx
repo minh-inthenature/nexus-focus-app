@@ -3,15 +3,23 @@ import {
   Calendar,
   ChevronDown,
   ChevronRight,
+  FileCode2,
   FilePlus2,
   FileText,
   Folder,
   FolderOpen,
   FolderPlus,
   Pencil,
+  Shapes,
   Star,
   Trash2,
 } from 'lucide-react';
+import { isCanvasNote } from '@/features/notes/utils/canvasNote';
+import {
+  getCodeLanguageMeta,
+  getNoteLanguage,
+  isCodeNote,
+} from '@/features/notes/utils/codeNote';
 import type { FolderRecord, NoteRecord } from '@/services';
 import { cn } from '@/utils/cn';
 
@@ -112,6 +120,10 @@ export function FolderTree({
     const isActive = note.id === activeNoteId;
     const isRenaming =
       editing?.kind === 'rename-note' && editing.id === note.id;
+    const isCanvas = isCanvasNote(note);
+    const codeMeta = isCodeNote(note)
+      ? getCodeLanguageMeta(getNoteLanguage(note))
+      : null;
 
     return (
       <div
@@ -154,13 +166,32 @@ export function FolderTree({
                   className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                   aria-hidden="true"
                 />
+              ) : isCanvas ? (
+                <Shapes
+                  className="h-3.5 w-3.5 shrink-0 text-primary/85"
+                  aria-hidden="true"
+                />
+              ) : codeMeta ? (
+                <FileCode2
+                  className="h-3.5 w-3.5 shrink-0 text-primary/85"
+                  aria-hidden="true"
+                />
               ) : (
                 <FileText
                   className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                   aria-hidden="true"
                 />
               )}
-              <span className="truncate">{note.title}</span>
+              <span className="min-w-0 flex-1 truncate">{note.title}</span>
+              {isCanvas ? (
+                <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 py-0 font-mono text-[9px] leading-tight text-muted-foreground">
+                  CANVAS
+                </span>
+              ) : codeMeta ? (
+                <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 py-0 font-mono text-[9px] leading-tight text-muted-foreground">
+                  {codeMeta.badge}
+                </span>
+              ) : null}
               {note.isFavorite ? (
                 <Star
                   className="h-3 w-3 shrink-0 fill-current text-muted-foreground"

@@ -84,6 +84,7 @@ export class NexusSyncEngine implements SyncService {
     if (typeof window !== 'undefined') {
       window.addEventListener('online', this.onOnlineBound);
       window.addEventListener('offline', this.onOfflineBound);
+      window.addEventListener('focus', this.onVisibilityChangeBound);
     }
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this.onVisibilityChangeBound);
@@ -109,6 +110,7 @@ export class NexusSyncEngine implements SyncService {
     if (typeof window !== 'undefined') {
       window.removeEventListener('online', this.onOnlineBound);
       window.removeEventListener('offline', this.onOfflineBound);
+      window.removeEventListener('focus', this.onVisibilityChangeBound);
     }
     if (typeof document !== 'undefined') {
       document.removeEventListener(

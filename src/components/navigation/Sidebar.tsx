@@ -1,11 +1,13 @@
 import { useEffect, useMemo } from 'react';
 import {
+  FileCode2,
   FileText,
   Folder,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  Shapes,
   Star,
   Trees,
   X,
@@ -19,6 +21,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useNotesStore } from '@/features/notes/stores/useNotesStore';
+import { isCanvasNote } from '@/features/notes/utils/canvasNote';
+import {
+  getCodeLanguageMeta,
+  getNoteLanguage,
+  isCodeNote,
+} from '@/features/notes/utils/codeNote';
 import { useTheme } from '@/hooks/useTheme';
 import { useAppStore } from '@/stores/useAppStore';
 import { cn } from '@/utils/cn';
@@ -197,20 +205,35 @@ export function Sidebar() {
           {favoriteNotes.length > 0 ? (
             <SidebarSection title="Favorites" emptyLabel="No favorite items yet">
               <div className="space-y-0.5">
-                {favoriteNotes.map((note) => (
-                  <Link
-                    key={note.id}
-                    to={`/notes/${note.id}`}
-                    onClick={closeMobile}
-                    className="flex h-7 items-center gap-2 rounded-lg px-2 text-xs text-sidebar-foreground/80 transition-colors duration-150 ease-out hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                  >
-                    <Star
-                      className="h-3 w-3 shrink-0 fill-current text-primary"
-                      aria-hidden="true"
-                    />
-                    <span className="truncate">{note.title}</span>
-                  </Link>
-                ))}
+                {favoriteNotes.map((note) => {
+                  const isCanvas = isCanvasNote(note);
+                  const codeMeta = isCodeNote(note)
+                    ? getCodeLanguageMeta(getNoteLanguage(note))
+                    : null;
+                  return (
+                    <Link
+                      key={note.id}
+                      to={`/notes/${note.id}`}
+                      onClick={closeMobile}
+                      className="flex h-7 items-center gap-2 rounded-lg px-2 text-xs text-sidebar-foreground/80 transition-colors duration-150 ease-out hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    >
+                      <Star
+                        className="h-3 w-3 shrink-0 fill-current text-primary"
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1 truncate">{note.title}</span>
+                      {isCanvas ? (
+                        <span className="shrink-0 rounded border border-border/70 bg-muted/50 px-1 font-mono text-[9px] text-muted-foreground">
+                          CANVAS
+                        </span>
+                      ) : codeMeta ? (
+                        <span className="shrink-0 rounded border border-border/70 bg-muted/50 px-1 font-mono text-[9px] text-muted-foreground">
+                          {codeMeta.badge}
+                        </span>
+                      ) : null}
+                    </Link>
+                  );
+                })}
               </div>
             </SidebarSection>
           ) : null}
@@ -220,20 +243,47 @@ export function Sidebar() {
           >
             {recentNotes.length > 0 ? (
               <div className="space-y-0.5">
-                {recentNotes.map((note) => (
-                  <Link
-                    key={note.id}
-                    to={`/notes/${note.id}`}
-                    onClick={closeMobile}
-                    className="flex h-7 items-center gap-2 rounded-lg px-2 text-xs text-sidebar-foreground/80 transition-colors duration-150 ease-out hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                  >
-                    <FileText
-                      className="h-3 w-3 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <span className="truncate">{note.title}</span>
-                  </Link>
-                ))}
+                {recentNotes.map((note) => {
+                  const isCanvas = isCanvasNote(note);
+                  const codeMeta = isCodeNote(note)
+                    ? getCodeLanguageMeta(getNoteLanguage(note))
+                    : null;
+                  return (
+                    <Link
+                      key={note.id}
+                      to={`/notes/${note.id}`}
+                      onClick={closeMobile}
+                      className="flex h-7 items-center gap-2 rounded-lg px-2 text-xs text-sidebar-foreground/80 transition-colors duration-150 ease-out hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    >
+                      {isCanvas ? (
+                        <Shapes
+                          className="h-3 w-3 shrink-0 text-primary/80"
+                          aria-hidden="true"
+                        />
+                      ) : codeMeta ? (
+                        <FileCode2
+                          className="h-3 w-3 shrink-0 text-primary/80"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <FileText
+                          className="h-3 w-3 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span className="min-w-0 flex-1 truncate">{note.title}</span>
+                      {isCanvas ? (
+                        <span className="shrink-0 rounded border border-border/70 bg-muted/50 px-1 font-mono text-[9px] text-muted-foreground">
+                          CANVAS
+                        </span>
+                      ) : codeMeta ? (
+                        <span className="shrink-0 rounded border border-border/70 bg-muted/50 px-1 font-mono text-[9px] text-muted-foreground">
+                          {codeMeta.badge}
+                        </span>
+                      ) : null}
+                    </Link>
+                  );
+                })}
               </div>
             ) : undefined}
           </SidebarSection>

@@ -10,6 +10,7 @@ import type {
 import type {
   RemoteAttachmentMetadata,
   RemoteCalendarEventMetadata,
+  RemoteCloudNoteMetadata,
   RemoteFolderMetadata,
   RemoteNoteMappingMetadata,
   RemoteTaskMetadata,
@@ -28,11 +29,13 @@ export interface SyncPlannerInput {
   readonly remoteMappings: readonly RemoteNoteMappingMetadata[];
   readonly remoteAttachments: readonly RemoteAttachmentMetadata[];
   readonly driveFiles: readonly DriveFileRef[];
+  readonly remoteCloudNotes?: readonly RemoteCloudNoteMetadata[];
   readonly localTasks?: readonly TaskRecord[];
   readonly remoteTasks?: readonly RemoteTaskMetadata[];
   readonly localCalendarEvents?: readonly CalendarEventRecord[];
   readonly remoteCalendarEvents?: readonly RemoteCalendarEventMetadata[];
   readonly includeDriveSync?: boolean;
+  readonly includeCloudNotesSync?: boolean;
 }
 
 function getFolderDepth(
@@ -74,6 +77,8 @@ export function buildSyncPlan(input: SyncPlannerInput): SyncPlan {
   const actions: SyncPlanAction[] = [];
 
   const includeDriveSync = input.includeDriveSync ?? true;
+  const includeCloudNotesSync = input.includeCloudNotesSync ?? false;
+  const remoteCloudNotes = input.remoteCloudNotes ?? [];
   const localTasks = input.localTasks ?? [];
   const remoteTasks = input.remoteTasks ?? [];
   const localCalendarEvents = input.localCalendarEvents ?? [];
@@ -99,6 +104,9 @@ export function buildSyncPlan(input: SyncPlannerInput): SyncPlan {
   const remoteAttachmentMap = new Map(
     input.remoteAttachments.map((a) => [a.localAttachmentId, a]),
   );
+  const remoteCloudNoteMap = new Map(
+    remoteCloudNotes.map((n) => [n.id, n]),
+  );
   const remoteTaskMap = new Map(remoteTasks.map((t) => [t.id, t]));
   const remoteEventMap = new Map(remoteCalendarEvents.map((e) => [e.id, e]));
   const driveFileById = new Map(input.driveFiles.map((f) => [f.id, f]));
@@ -123,77 +131,101 @@ export function buildSyncPlan(input: SyncPlannerInput): SyncPlan {
     }
   }
 
-  if (includeDriveSync) {
-
   // ---------------------------------------------------------------------------
-  // 1. Folders (push parent-first, delete child-first, then pull remote)
+  // 1. Folders (synced via Supabase `sync_folders` when signed in or Drive connected)
   // ---------------------------------------------------------------------------
-  const folderPushList = Array.from(pendingFolderChanges.values())
-    .filter((c) => c.operation !== 'delete')
-    .sort(
-      (a, b) =>
-        getFolderDepth(a.entityId, localFolderMap) -
-        getFolderDepth(b.entityId, localFolderMap),
-    );
+  if (includeDriveSync || includeCloudNotesSync) {
+    const folderPushList = Array.from(pendingFolderChanges.values())
+      .filter((c) => c.operation !== 'delete')
+      .sort(
+        (a, b) =>
+          getFolderDepth(a.entityId, localFolderMap) -
+          getFolderDepth(b.entityId, localFolderMap),
+      );
 
-  for (const change of folderPushList) {
-    const localFolder = localFolderMap.get(change.entityId);
-    if (localFolder && !localFolder.deletedAt) {
+    for (const change of folderPushList) {
+      const localFolder = localFolderMap.get(change.entityId);
+      if (localFolder && !localFolder.deletedAt) {
+        actions.push({
+          type: 'push_folder',
+          folderId: localFolder.id,
+          changeId: change.id,
+        });
+      }
+    }
+
+    if (includeCloudNotesSync) {
+      const missingRemoteFolders = input.localFolders
+        .filter(
+          (f) =>
+            !f.deletedAt &&
+            !pendingFolderChanges.has(f.id) &&
+            !remoteFolderMap.has(f.id),
+        )
+        .sort(
+          (a, b) =>
+            getFolderDepth(a.id, localFolderMap) -
+            getFolderDepth(b.id, localFolderMap),
+        );
+
+      for (const folder of missingRemoteFolders) {
+        actions.push({
+          type: 'push_folder',
+          folderId: folder.id,
+        });
+      }
+    }
+
+    const folderDeleteList = Array.from(pendingFolderChanges.values())
+      .filter((c) => c.operation === 'delete')
+      .sort(
+        (a, b) =>
+          getFolderDepth(b.entityId, localFolderMap) -
+          getFolderDepth(a.entityId, localFolderMap),
+      );
+
+    for (const change of folderDeleteList) {
       actions.push({
-        type: 'push_folder',
-        folderId: localFolder.id,
+        type: 'delete_remote_folder',
+        folderId: change.entityId,
         changeId: change.id,
       });
     }
-  }
 
-  const folderDeleteList = Array.from(pendingFolderChanges.values())
-    .filter((c) => c.operation === 'delete')
-    .sort(
+    const remoteFoldersSorted = [...input.remoteFolders].sort(
       (a, b) =>
-        getFolderDepth(b.entityId, localFolderMap) -
-        getFolderDepth(a.entityId, localFolderMap),
+        getRemoteFolderDepth(a.localFolderId, remoteFolderMap) -
+        getRemoteFolderDepth(b.localFolderId, remoteFolderMap),
     );
 
-  for (const change of folderDeleteList) {
-    actions.push({
-      type: 'delete_remote_folder',
-      folderId: change.entityId,
-      changeId: change.id,
-    });
-  }
+    for (const remote of remoteFoldersSorted) {
+      if (pendingFolderChanges.has(remote.localFolderId)) continue;
+      const local = localFolderMap.get(remote.localFolderId);
 
-  const remoteFoldersSorted = [...input.remoteFolders].sort(
-    (a, b) =>
-      getRemoteFolderDepth(a.localFolderId, remoteFolderMap) -
-      getRemoteFolderDepth(b.localFolderId, remoteFolderMap),
-  );
-
-  for (const remote of remoteFoldersSorted) {
-    if (pendingFolderChanges.has(remote.localFolderId)) continue;
-    const local = localFolderMap.get(remote.localFolderId);
-
-    if (remote.deletedAt) {
-      if (local && !local.deletedAt) {
-        actions.push({
-          type: 'delete_local_folder',
-          folderId: remote.localFolderId,
-        });
+      if (remote.deletedAt) {
+        if (local && !local.deletedAt) {
+          actions.push({
+            type: 'delete_local_folder',
+            folderId: remote.localFolderId,
+          });
+        }
+        continue;
       }
-      continue;
-    }
 
-    const localRev = local?.revision ?? 0;
-    if (
-      !local ||
-      local.deletedAt ||
-      remote.revision > localRev ||
-      remote.name !== local.name ||
-      remote.parentFolderId !== local.parentId
-    ) {
-      actions.push({ type: 'pull_remote_folder', folder: remote });
+      const localRev = local?.revision ?? 0;
+      if (
+        !local ||
+        local.deletedAt ||
+        remote.revision > localRev ||
+        remote.name !== local.name ||
+        remote.parentFolderId !== local.parentId
+      ) {
+        actions.push({ type: 'pull_remote_folder', folder: remote });
+      }
     }
   }
+
+  if (includeDriveSync) {
 
   // ---------------------------------------------------------------------------
   // 2. Attachments
@@ -372,6 +404,78 @@ export function buildSyncPlan(input: SyncPlannerInput): SyncPlan {
     }
   }
   } // end if (includeDriveSync)
+
+  // ---------------------------------------------------------------------------
+  // 3b. Direct Cloud Notes Sync (Supabase `public.notes`, independent of Drive)
+  // ---------------------------------------------------------------------------
+  if (includeCloudNotesSync) {
+    for (const change of pendingNoteChanges.values()) {
+      const localNote = localNoteMap.get(change.entityId);
+
+      if (change.operation === 'delete') {
+        actions.push({
+          type: 'delete_remote_cloud_note',
+          noteId: change.entityId,
+          ...(includeDriveSync ? {} : { changeId: change.id }),
+        });
+        continue;
+      }
+
+      if (localNote && !localNote.deletedAt) {
+        actions.push({
+          type: 'push_cloud_note',
+          noteId: localNote.id,
+          ...(includeDriveSync ? {} : { changeId: change.id }),
+        });
+      }
+    }
+
+    // Backfill local notes created offline / before sign-in so nothing on laptop is left behind
+    for (const localNote of input.localNotes) {
+      if (localNote.deletedAt || pendingNoteChanges.has(localNote.id)) continue;
+      const remote = remoteCloudNoteMap.get(localNote.id);
+
+      if (
+        !remote ||
+        (!remote.deletedAt &&
+          (localNote.revision > remote.revision ||
+            (localNote.revision === remote.revision &&
+              localNote.updatedAt > remote.updatedAt)))
+      ) {
+        actions.push({
+          type: 'push_cloud_note',
+          noteId: localNote.id,
+        });
+      }
+    }
+
+    for (const remote of remoteCloudNotes) {
+      if (pendingNoteChanges.has(remote.id)) continue;
+      const localNote = localNoteMap.get(remote.id);
+
+      if (remote.deletedAt) {
+        if (localNote && !localNote.deletedAt) {
+          actions.push({
+            type: 'delete_local_cloud_note',
+            noteId: remote.id,
+          });
+        }
+        continue;
+      }
+
+      if (
+        !localNote ||
+        localNote.deletedAt ||
+        remote.revision > localNote.revision ||
+        remote.updatedAt > localNote.updatedAt
+      ) {
+        actions.push({
+          type: 'pull_remote_cloud_note',
+          note: remote,
+        });
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // 4. Tasks (Supabase structured records, independent of Drive connectivity)
