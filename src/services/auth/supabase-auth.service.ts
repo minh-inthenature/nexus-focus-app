@@ -110,15 +110,26 @@ export class SupabaseAuthService implements AuthService {
       throw new Error('Supabase authentication is not configured.');
     }
 
+    // Return existing session first if already established (e.g. React StrictMode double-mount)
+    const existing = await this.getSession();
+    if (existing) {
+      return existing;
+    }
+
     if (code) {
       const { data, error } = await client.auth.exchangeCodeForSession(code);
       if (error) {
+        // Re-check session in case a concurrent exchange just succeeded
+        const recovered = await this.getSession();
+        if (recovered) {
+          return recovered;
+        }
         throw new Error(error.message || 'Failed to complete Google sign-in.');
       }
       return mapSession(data.session);
     }
 
-    return this.getSession();
+    return null;
   }
 
   public async signOut(): Promise<void> {
