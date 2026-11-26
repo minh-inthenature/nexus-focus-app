@@ -1,0 +1,331 @@
+import { describe, expect, it } from 'vitest';
+import {
+  filterAndSortTasks,
+  isTaskDueToday,
+  isTaskOverdue,
+  isTaskUpcoming,
+  normalizeTaskTags,
+  validateTaskDates,
+} from '@/features/tasks/utils/taskFilters';
+import type { TaskRecord } from '@/services/storage/db';
+import { buildSyncPlan } from '../syncPlanner';
+import type { RemoteTaskMetadata, SyncChange } from '../syncTypes';
+
+const TODAY = '2026-11-25';
+const YESTERDAY = '2026-11-24';
+const TOMORROW = '2026-11-26';
+const NOW_ISO = '2026-11-25T10:00:00.000Z';
+const LATER_ISO = '2026-11-25T10:15:00.000Z';
+
+function makeTask(overrides: Partial<TaskRecord> = {}): TaskRecord {
+  return {
+    id: 'task-1',
+    userId: 'user-1',
+    title: 'Write Algorithms Report',
+    status: 'todo',
+    priority: 'medium',
+    tags: [],
+    linkedNoteIds: [],
+    createdAt: NOW_ISO,
+    updatedAt: NOW_ISO,
+    revision: 1,
+    ...overrides,
+  };
+}
+
+function makeRemoteTask(
+  overrides: Partial<RemoteTaskMetadata> = {},
+): RemoteTaskMetadata {
+  return {
+    id: 'task-1',
+    userId: 'user-1',
+    title: 'Write Algorithms Report',
+    description: null,
+    status: 'todo',
+    priority: 'medium',
+    startDate: null,
+    dueDate: null,
+    tags: [],
+    category: null,
+    linkedNoteIds: [],
+    revision: 1,
+    createdAt: NOW_ISO,
+    updatedAt: NOW_ISO,
+    completedAt: null,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+describe('Task validation, tags, and filter/sort helpers', () => {
+  it('validates date ranges and rejects startDate > dueDate', () => {
+    expect(validateTaskDates('2026-11-25', '2026-11-26')).toBeNull();
+    expect(validateTaskDates('2026-11-25', '2026-11-25')).toBeNull();
+    expect(validateTaskDates('2026-11-27', '2026-11-25')).toBe(
+      'Start date cannot be later than due date.',
+    );
+  });
+
+  it('normalizes and deduplicates task tags', () => {
+    expect(normalizeTaskTags([' #University ', 'university', 'ML', '#ml'])).toEqual([
+      'university',
+      'ml',
+    ]);
+  });
+
+  it('classifies overdue, today, and upcoming tasks accurately', () => {
+    const overdue = makeTask({ dueDate: YESTERDAY });
+    const dueToday = makeTask({ dueDate: TODAY });
+    const doneYesterday = makeTask({ status: 'done', dueDate: YESTERDAY });
+    const upcoming = makeTask({ dueDate: TOMORROW });
+
+    expect(isTaskOverdue(overdue, TODAY)).toBe(true);
+    expect(isTaskOverdue(doneYesterday, TODAY)).toBe(false);
+    expect(isTaskDueToday(dueToday, TODAY)).toBe(true);
+    expect(isTaskUpcoming(upcoming, TODAY)).toBe(true);
+  });
+
+  it('filters by preset, search, priority, tag, category and sorts deterministically', () => {
+    const tasks: TaskRecord[] = [
+      makeTask({
+        id: 't1',
+        title: 'Submit Linear Algebra HW',
+        priority: 'high',
+        dueDate: YESTERDAY,
+        category: 'University',
+        tags: ['math'],
+      }),
+      makeTask({
+        id: 't2',
+        title: 'Buy groceries',
+        priority: 'low',
+        dueDate: TODAY,
+        category: 'Personal',
+        tags: ['errands'],
+      }),
+      makeTask({
+        id: 't3',
+        title: 'Review Deep Learning notes',
+        status: 'in_progress',
+        priority: 'high',
+        dueDate: TOMORROW,
+        category: 'University',
+        tags: ['ml'],
+      }),
+      makeTask({
+        id: 't4',
+        title: 'Completed task',
+        status: 'done',
+        priority: 'medium',
+        dueDate: YESTERDAY,
+      }),
+    ];
+
+    const overdueOnly = filterAndSortTasks(tasks, {
+      preset: 'overdue',
+      statusFilter: 'all',
+      priorityFilter: 'all',
+      tagFilter: null,
+      categoryFilter: null,
+      searchQuery: '',
+      sortBy: 'dueDate',
+      today: TODAY,
+    });
+    expect(overdueOnly.map((t) => t.id)).toEqual(['t1']);
+
+    const uniHighSearch = filterAndSortTasks(tasks, {
+      preset: 'active',
+      statusFilter: 'all',
+      priorityFilter: 'high',
+      tagFilter: null,
+      categoryFilter: 'University',
+      searchQuery: 'deep',
+      sortBy: 'priority',
+      today: TODAY,
+    });
+    expect(uniHighSearch.map((t) => t.id)).toEqual(['t3']);
+
+    const sortedByPriority = filterAndSortTasks(tasks, {
+      preset: 'active',
+      statusFilter: 'all',
+      priorityFilter: 'all',
+      tagFilter: null,
+      categoryFilter: null,
+      searchQuery: '',
+      sortBy: 'priority',
+      today: TODAY,
+    });
+    expect(sortedByPriority.map((t) => t.id)).toEqual(['t1', 't3', 't2']);
+  });
+});
+
+describe('buildSyncPlan for Tasks (Supabase Hybrid Sync)', () => {
+  it('plans task upload even when Google Drive is disconnected (includeDriveSync: false)', () => {
+    const task = makeTask();
+    const change: SyncChange = {
+      id: 'c-task-1',
+      entityType: 'task',
+      entityId: task.id,
+      operation: 'create',
+      localRevision: 1,
+      createdAt: NOW_ISO,
+      status: 'pending',
+      retryCount: 0,
+    };
+
+    const plan = buildSyncPlan({
+      localNotes: [],
+      localFolders: [],
+      localAttachments: [],
+      localMappings: [],
+      pendingChanges: [change],
+      remoteFolders: [],
+      remoteMappings: [],
+      remoteAttachments: [],
+      driveFiles: [],
+      localTasks: [task],
+      remoteTasks: [],
+      includeDriveSync: false,
+    });
+
+    expect(plan.actions).toEqual([
+      { type: 'push_task', taskId: 'task-1', changeId: 'c-task-1' },
+    ]);
+  });
+
+  it('downloads remote tasks onto a second device and stays idempotent when synced', () => {
+    const remoteTask = makeRemoteTask({ revision: 2, updatedAt: LATER_ISO });
+
+    // Device B (empty local) pulls remote task
+    const pullPlan = buildSyncPlan({
+      localNotes: [],
+      localFolders: [],
+      localAttachments: [],
+      localMappings: [],
+      pendingChanges: [],
+      remoteFolders: [],
+      remoteMappings: [],
+      remoteAttachments: [],
+      driveFiles: [],
+      localTasks: [],
+      remoteTasks: [remoteTask],
+      includeDriveSync: false,
+    });
+    expect(pullPlan.actions).toEqual([
+      { type: 'pull_remote_task', task: remoteTask },
+    ]);
+
+    // Once synced locally with matching baseline, steady-state produces zero actions
+    const syncedLocal = makeTask({
+      revision: 2,
+      updatedAt: LATER_ISO,
+      lastSyncedRevision: 2,
+      lastSyncedUpdatedAt: LATER_ISO,
+    });
+    const steadyPlan = buildSyncPlan({
+      localNotes: [],
+      localFolders: [],
+      localAttachments: [],
+      localMappings: [],
+      pendingChanges: [],
+      remoteFolders: [],
+      remoteMappings: [],
+      remoteAttachments: [],
+      driveFiles: [],
+      localTasks: [syncedLocal],
+      remoteTasks: [remoteTask],
+      includeDriveSync: false,
+    });
+    expect(steadyPlan.actions).toEqual([]);
+  });
+
+  it('detects concurrent task conflicts and propagates task deletions safely', () => {
+    // 1. Both edited offline -> conflict
+    const localEdited = makeTask({
+      id: 'task-conflict',
+      revision: 2,
+      lastSyncedRevision: 1,
+      updatedAt: LATER_ISO,
+    });
+    const remoteEdited = makeRemoteTask({
+      id: 'task-conflict',
+      revision: 2,
+      updatedAt: LATER_ISO,
+    });
+
+    // 2. Deleted locally -> delete_remote_task
+    const localDeleted = makeTask({
+      id: 'task-del-local',
+      deletedAt: LATER_ISO,
+      revision: 2,
+      lastSyncedRevision: 1,
+    });
+    const remoteUnchanged = makeRemoteTask({ id: 'task-del-local', revision: 1 });
+
+    // 3. Deleted remotely while locally clean -> delete_local_task
+    const localClean = makeTask({
+      id: 'task-del-remote',
+      revision: 1,
+      lastSyncedRevision: 1,
+    });
+    const remoteDeleted = makeRemoteTask({
+      id: 'task-del-remote',
+      revision: 2,
+      deletedAt: LATER_ISO,
+    });
+
+    const plan = buildSyncPlan({
+      localNotes: [],
+      localFolders: [],
+      localAttachments: [],
+      localMappings: [],
+      pendingChanges: [
+        {
+          id: 'c-conf',
+          entityType: 'task',
+          entityId: 'task-conflict',
+          operation: 'update',
+          localRevision: 2,
+          createdAt: LATER_ISO,
+          status: 'pending',
+          retryCount: 0,
+        },
+        {
+          id: 'c-del',
+          entityType: 'task',
+          entityId: 'task-del-local',
+          operation: 'delete',
+          localRevision: 2,
+          createdAt: LATER_ISO,
+          status: 'pending',
+          retryCount: 0,
+        },
+      ],
+      remoteFolders: [],
+      remoteMappings: [],
+      remoteAttachments: [],
+      driveFiles: [],
+      localTasks: [localEdited, localDeleted, localClean],
+      remoteTasks: [remoteEdited, remoteUnchanged, remoteDeleted],
+      includeDriveSync: false,
+    });
+
+    expect(plan.actions).toEqual([
+      {
+        type: 'record_task_conflict',
+        taskId: 'task-conflict',
+        reason: 'both_modified',
+        remoteTask: remoteEdited,
+      },
+      {
+        type: 'delete_remote_task',
+        taskId: 'task-del-local',
+        changeId: 'c-del',
+      },
+      {
+        type: 'delete_local_task',
+        taskId: 'task-del-remote',
+      },
+    ]);
+  });
+});

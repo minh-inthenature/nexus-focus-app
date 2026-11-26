@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1f1e1c" />
+    <meta
+      name="description"
+      content="Nexus — local-first Markdown knowledge base, personal calendar, and task workspace."
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400&display=swap"
+      rel="stylesheet"
+    />
+    <title>Nexus</title>
+    <script>
+      (function () {
+        try {
+          var pref = localStorage.getItem('nexus-theme') || 'dark';
+          var resolved =
+            pref === 'system'
+              ? window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+              : pref === 'light'
+                ? 'light'
+                : pref === 'forest'
+                  ? 'forest'
+                  : 'dark';
+          var root = document.documentElement;
+          root.classList.remove('light', 'dark', 'forest');
+          root.classList.add(resolved);
+          root.style.colorScheme = resolved === 'light' ? 'light' : 'dark';
+        } catch (_e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+  </head>
+  <body class="bg-background text-foreground antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
