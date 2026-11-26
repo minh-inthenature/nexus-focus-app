@@ -153,4 +153,62 @@ describe('RFC 5545 .ics calendar parser, ZIP extractor & exporter', () => {
     const parsed = parseIcsContent(extracted.contents[0]!.text);
     expect(parsed.events[0]?.title).toBe('From Zip');
   });
+
+  it('imports and exports recurring RRULE, EXDATE, and RECURRENCE-ID overrides cleanly', () => {
+    const googleRecurringIcs = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:weekly-tue@google.com',
+      'DTSTART;TZID=UTC:20261103T100000Z',
+      'DTEND;TZID=UTC:20261103T110000Z',
+      'RRULE:FREQ=WEEKLY;BYDAY=TU',
+      'EXDATE;VALUE=DATE:20261110',
+      'SUMMARY:Weekly Lecture',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:weekly-tue@google.com',
+      'RECURRENCE-ID:20261117T100000Z',
+      'DTSTART:20261118T140000Z',
+      'DTEND:20261118T150000Z',
+      'SUMMARY:Weekly Lecture (Rescheduled)',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+
+    const parsed = parseIcsContent(googleRecurringIcs);
+    expect(parsed.events).toHaveLength(2);
+
+    const master = parsed.events[0]!;
+    expect(master.uid).toBe('weekly-tue@google.com');
+    expect(master.rrule).toBe('FREQ=WEEKLY;BYDAY=TU');
+    expect(master.exdates).toEqual(['2026-11-10', '2026-11-17']);
+
+    const override = parsed.events[1]!;
+    expect(override.uid).toBe('weekly-tue@google.com__2026-11-17');
+    expect(override.rrule).toBeUndefined();
+    expect(override.title).toBe('Weekly Lecture (Rescheduled)');
+
+    const exported = exportEventsToIcs([
+      {
+        id: 'rec-1',
+        userId: 'local',
+        title: master.title,
+        startAt: master.startAt,
+        endAt: master.endAt,
+        allDay: false,
+        timezone: 'UTC',
+        category: 'study',
+        linkedNoteIds: [],
+        linkedTaskIds: [],
+        rrule: master.rrule,
+        exdates: master.exdates,
+        createdAt: '2026-11-01T00:00:00.000Z',
+        updatedAt: '2026-11-01T00:00:00.000Z',
+        revision: 1,
+      },
+    ]);
+    expect(exported).toContain('RRULE:FREQ=WEEKLY;BYDAY=TU');
+    expect(exported).toContain('EXDATE;VALUE=DATE:20261110,20261117');
+  });
 });

@@ -57,7 +57,7 @@ export function UpcomingEventsWidget({
               const accent = getEventAccentClasses(ev.category, ev.color);
               return (
                 <Link
-                  key={ev.id}
+                  key={`${ev.id}-${ev.startAt}`}
                   to={`/calendar?date=${startDateKey}&eventId=${ev.id}`}
                   className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2.5 transition-colors duration-150 ease-out hover:bg-accent/55"
                 >

@@ -26,6 +26,8 @@ export interface CreateCalendarEventInput {
   readonly color?: string;
   readonly linkedNoteIds?: readonly string[];
   readonly linkedTaskIds?: readonly string[];
+  readonly rrule?: string;
+  readonly exdates?: readonly string[];
 }
 
 export interface UpdateCalendarEventPatch {
@@ -40,6 +42,8 @@ export interface UpdateCalendarEventPatch {
   readonly color?: string | null;
   readonly linkedNoteIds?: readonly string[];
   readonly linkedTaskIds?: readonly string[];
+  readonly rrule?: string | null;
+  readonly exdates?: readonly string[] | null;
 }
 
 function dedupeIds(ids: readonly string[] | undefined): string[] {
@@ -118,6 +122,11 @@ export async function createCalendarEvent(
   const color =
     input.color && input.color !== 'default' ? input.color.trim() : undefined;
   const timezone = input.timezone?.trim() || getLocalTimezone();
+  const rrule = input.rrule?.trim() || undefined;
+  const exdates =
+    input.exdates && input.exdates.length > 0
+      ? dedupeIds(input.exdates)
+      : undefined;
 
   const record: CalendarEventRecord = {
     id: createUuid(),
@@ -133,6 +142,8 @@ export async function createCalendarEvent(
     ...(color ? { color } : {}),
     linkedNoteIds: dedupeIds(input.linkedNoteIds),
     linkedTaskIds: dedupeIds(input.linkedTaskIds),
+    ...(rrule ? { rrule } : {}),
+    ...(exdates ? { exdates } : {}),
     createdAt: now,
     updatedAt: now,
     revision: 1,
@@ -211,6 +222,22 @@ export async function updateCalendarEvent(
           ? patch.timezone.trim() || getLocalTimezone()
           : existing.timezone ?? getLocalTimezone();
 
+      const nextRrule =
+        patch.rrule === null
+          ? undefined
+          : patch.rrule !== undefined
+            ? patch.rrule.trim() || undefined
+            : existing.rrule;
+
+      const nextExdates =
+        patch.exdates === null
+          ? undefined
+          : patch.exdates !== undefined
+            ? patch.exdates.length > 0
+              ? dedupeIds(patch.exdates)
+              : undefined
+            : existing.exdates;
+
       const now = new Date().toISOString();
 
       const cleaned: CalendarEventRecord = {
@@ -236,6 +263,8 @@ export async function updateCalendarEvent(
         ...(nextDescription ? { description: nextDescription } : {}),
         ...(nextLocation ? { location: nextLocation } : {}),
         ...(nextColor ? { color: nextColor } : {}),
+        ...(nextRrule ? { rrule: nextRrule } : {}),
+        ...(nextExdates && nextExdates.length > 0 ? { exdates: nextExdates } : {}),
         ...(existing.googleEventId !== undefined
           ? { googleEventId: existing.googleEventId }
           : {}),

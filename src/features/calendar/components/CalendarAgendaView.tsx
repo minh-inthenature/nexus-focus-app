@@ -5,6 +5,7 @@ import {
   ExternalLink,
   MapPin,
   Plus,
+  Repeat,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -160,7 +161,7 @@ export function CalendarAgendaView({
                 const accent = getEventAccentClasses(ev.category, ev.color);
                 return (
                   <div
-                    key={ev.id}
+                    key={`${ev.id}-${ev.startAt}`}
                     className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 transition-colors hover:bg-accent/25"
                   >
                     <div className="min-w-0 flex-1 space-y-1">
@@ -186,9 +187,15 @@ export function CalendarAgendaView({
                         <button
                           type="button"
                           onClick={() => onEditEvent(ev.id)}
-                          className="text-left text-sm font-medium text-foreground hover:underline cursor-pointer"
+                          className="inline-flex items-center gap-1.5 text-left text-sm font-medium text-foreground hover:underline cursor-pointer"
                         >
-                          {ev.title}
+                          <span>{ev.title}</span>
+                          {ev.rrule ? (
+                            <Repeat
+                              className="h-3 w-3 text-muted-foreground"
+                              aria-hidden="true"
+                            />
+                          ) : null}
                         </button>
                       </div>
 

@@ -4,6 +4,7 @@ import {
   ExternalLink,
   MapPin,
   Plus,
+  Repeat,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -177,16 +178,16 @@ export function CalendarMonthView({
                       );
                       return (
                         <button
-                          key={`ev-${ev.id}`}
+                          key={`ev-${ev.id}-${ev.startAt}`}
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectDate(dateKey);
                             onEditEvent(ev.id);
                           }}
-                          title={`${ev.title} (${CATEGORY_LABELS[ev.category]})`}
+                          title={`${ev.title} (${CATEGORY_LABELS[ev.category]})${ev.rrule ? ' • Repeats' : ''}`}
                           className={cn(
-                            'flex w-full items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-90 cursor-pointer',
+                            'flex w-full min-w-0 items-center gap-1 overflow-hidden rounded border px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-90 cursor-pointer',
                             accent.surfaceClass,
                           )}
                         >
@@ -202,7 +203,7 @@ export function CalendarMonthView({
                               {formatTimeDisplay(ev.startAt)}
                             </span>
                           ) : null}
-                          <span className="truncate font-medium">
+                          <span className="min-w-0 flex-1 truncate font-medium">
                             {ev.title}
                           </span>
                         </button>
@@ -304,7 +305,7 @@ export function CalendarMonthView({
               const accent = getEventAccentClasses(ev.category, ev.color);
               return (
                 <div
-                  key={ev.id}
+                  key={`${ev.id}-${ev.startAt}`}
                   className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-border bg-background/60 px-3 py-2"
                 >
                   <div className="min-w-0 flex-1 space-y-1">
@@ -330,9 +331,15 @@ export function CalendarMonthView({
                       <button
                         type="button"
                         onClick={() => onEditEvent(ev.id)}
-                        className="text-left text-sm font-medium text-foreground hover:underline cursor-pointer"
+                        className="inline-flex items-center gap-1.5 text-left text-sm font-medium text-foreground hover:underline cursor-pointer"
                       >
-                        {ev.title}
+                        <span>{ev.title}</span>
+                        {ev.rrule ? (
+                          <Repeat
+                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                            aria-label="Repeating event"
+                          />
+                        ) : null}
                       </button>
                     </div>
 

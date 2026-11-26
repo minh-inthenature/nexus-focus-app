@@ -22,10 +22,14 @@ import {
   type CalendarViewMode,
 } from './stores/useCalendarStore';
 import {
+  addDays,
   addOneHourHHMM,
   filterCalendarEvents,
+  getMonthGridDates,
+  getWeekDates,
   isValidDateKey,
 } from './utils/calendarDateUtils';
+import { expandRecurringEventsForWindow } from './utils/recurrence';
 import {
   exportEventsToIcs,
   triggerIcsDownload,
@@ -185,9 +189,45 @@ export function CalendarPage() {
     [tasks],
   );
 
+  const activeWindow = useMemo(() => {
+    if (viewMode === 'month') {
+      const grid = getMonthGridDates(selectedDate);
+      return {
+        startKey: grid[0] ?? selectedDate,
+        endKey: grid[grid.length - 1] ?? selectedDate,
+      };
+    }
+    if (viewMode === 'week') {
+      const week = getWeekDates(selectedDate);
+      return {
+        startKey: week[0] ?? selectedDate,
+        endKey: week[week.length - 1] ?? selectedDate,
+      };
+    }
+    if (viewMode === 'day') {
+      return { startKey: selectedDate, endKey: selectedDate };
+    }
+    const minAgenda = startDateFilter || selectedDate;
+    const maxAgenda =
+      endDateFilter && endDateFilter >= minAgenda
+        ? endDateFilter
+        : addDays(minAgenda, 90);
+    return { startKey: minAgenda, endKey: maxAgenda };
+  }, [viewMode, selectedDate, startDateFilter, endDateFilter]);
+
+  const expandedEvents = useMemo(
+    () =>
+      expandRecurringEventsForWindow(
+        events,
+        activeWindow.startKey,
+        activeWindow.endKey,
+      ),
+    [events, activeWindow.startKey, activeWindow.endKey],
+  );
+
   const visibleEvents = useMemo(
     () =>
-      filterCalendarEvents(events, {
+      filterCalendarEvents(expandedEvents, {
         searchQuery,
         categoryFilter,
         startDateFilter,
@@ -196,7 +236,7 @@ export function CalendarPage() {
         linkedTaskId: linkedTaskIdFilter,
       }),
     [
-      events,
+      expandedEvents,
       searchQuery,
       categoryFilter,
       startDateFilter,
@@ -503,6 +543,7 @@ export function CalendarPage() {
               color: payload.color || null,
               linkedNoteIds: payload.linkedNoteIds,
               linkedTaskIds: payload.linkedTaskIds,
+              rrule: payload.rrule,
             });
           } else {
             await createEvent({
@@ -521,6 +562,7 @@ export function CalendarPage() {
                 : {}),
               linkedNoteIds: payload.linkedNoteIds,
               linkedTaskIds: payload.linkedTaskIds,
+              ...(payload.rrule ? { rrule: payload.rrule } : {}),
             });
           }
         }}

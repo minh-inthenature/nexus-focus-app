@@ -61,7 +61,7 @@ export function TodayScheduleWidget({
               const accent = getEventAccentClasses(ev.category, ev.color);
               return (
                 <div
-                  key={ev.id}
+                  key={`${ev.id}-${ev.startAt}`}
                   className="-mx-2 flex flex-col gap-1.5 rounded-lg px-2 py-2.5 transition-colors duration-150 ease-out hover:bg-accent/55"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">

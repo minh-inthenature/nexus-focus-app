@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Check, CheckSquare } from 'lucide-react';
+import { Check, CheckSquare, Repeat } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   CATEGORY_LABELS,
@@ -123,7 +123,7 @@ export function CalendarWeekView({
                 const accent = getEventAccentClasses(ev.category, ev.color);
                 return (
                   <button
-                    key={ev.id}
+                    key={`${ev.id}-${ev.startAt}`}
                     type="button"
                     onClick={() => onEditEvent(ev.id)}
                     title={`${ev.title} (${CATEGORY_LABELS[ev.category]})`}
@@ -140,6 +140,12 @@ export function CalendarWeekView({
                       aria-hidden="true"
                     />
                     <span className="truncate font-medium">{ev.title}</span>
+                    {ev.rrule ? (
+                      <Repeat
+                        className="ml-auto h-2.5 w-2.5 shrink-0 opacity-70"
+                        aria-hidden="true"
+                      />
+                    ) : null}
                   </button>
                 );
               })}
@@ -251,7 +257,7 @@ export function CalendarWeekView({
 
                   return (
                     <button
-                      key={event.id}
+                      key={`${event.id}-${event.startAt}`}
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();

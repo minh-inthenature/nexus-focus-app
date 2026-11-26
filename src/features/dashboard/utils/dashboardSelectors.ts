@@ -6,6 +6,7 @@ import {
   formatLocalDateKey,
   getEventDateRange,
 } from '@/features/calendar/utils/calendarDateUtils';
+import { expandRecurringEventsForWindow } from '@/features/calendar/utils/recurrence';
 import {
   isTaskDueToday,
   isTaskOverdue,
@@ -105,7 +106,12 @@ export function computeDashboardMetrics(
     }
   }
 
-  const eventsTodayCount = events.filter((ev) =>
+  const expandedEvents = expandRecurringEventsForWindow(
+    events,
+    todayKey,
+    todayKey,
+  );
+  const eventsTodayCount = expandedEvents.filter((ev) =>
     eventOccursOnDate(ev, todayKey),
   ).length;
 
@@ -125,7 +131,8 @@ export function selectTodaysEvents(
   events: readonly CalendarEventRecord[],
   todayKey: string,
 ): CalendarEventRecord[] {
-  return events
+  const expanded = expandRecurringEventsForWindow(events, todayKey, todayKey);
+  return expanded
     .filter((ev) => eventOccursOnDate(ev, todayKey))
     .sort((a, b) => {
       if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
@@ -143,7 +150,8 @@ export function selectUpcomingEvents(
   limit = 5,
 ): CalendarEventRecord[] {
   const maxDate = addDays(todayKey, daysAhead);
-  return events
+  const expanded = expandRecurringEventsForWindow(events, todayKey, maxDate);
+  return expanded
     .filter((ev) => {
       const { startDateKey } = getEventDateRange(ev);
       return startDateKey > todayKey && startDateKey <= maxDate;

@@ -6,6 +6,7 @@ import {
   getTodayDateKey,
   isValidDateKey,
 } from '@/features/calendar/utils/calendarDateUtils';
+import { parseRrule } from '@/features/calendar/utils/recurrence';
 import type { CalendarEventRecord, EventCategory } from '@/services/storage/db';
 
 export interface ParsedIcsEvent {
@@ -18,6 +19,8 @@ export interface ParsedIcsEvent {
   readonly allDay: boolean;
   readonly timezone?: string;
   readonly category: EventCategory;
+  readonly rrule?: string;
+  readonly exdates?: readonly string[];
 }
 
 export interface IcsParseResult {
@@ -277,6 +280,7 @@ export function parseIcsContent(icsText: string): IcsParseResult {
 
   const events: ParsedIcsEvent[] = [];
   const warnings: string[] = [];
+  const overridesByMasterUid = new Map<string, Set<string>>();
   let skippedCancelled = 0;
 
   let calendarTimezone: string | undefined;
@@ -290,6 +294,9 @@ export function parseIcsContent(icsText: string): IcsParseResult {
   let status: string | undefined;
   let categoriesRaw: string | undefined;
   let nexusCategory: string | undefined;
+  let rrule: string | undefined;
+  let exdates: string[] = [];
+  let recurrenceId: ParsedDateToken | null = null;
   let dtStart: ParsedDateToken | null = null;
   let dtEnd: ParsedDateToken | null = null;
   let durationMs: number | null = null;
@@ -302,6 +309,9 @@ export function parseIcsContent(icsText: string): IcsParseResult {
     status = undefined;
     categoriesRaw = undefined;
     nexusCategory = undefined;
+    rrule = undefined;
+    exdates = [];
+    recurrenceId = null;
     dtStart = null;
     dtEnd = null;
     durationMs = null;
@@ -321,6 +331,15 @@ export function parseIcsContent(icsText: string): IcsParseResult {
 
     if (upper === 'END:VEVENT') {
       if (inEvent) {
+        if (recurrenceId && uid) {
+          let set = overridesByMasterUid.get(uid);
+          if (!set) {
+            set = new Set<string>();
+            overridesByMasterUid.set(uid, set);
+          }
+          set.add(recurrenceId.dateKey);
+        }
+
         if (status?.toUpperCase() === 'CANCELLED') {
           skippedCancelled += 1;
         } else if (!dtStart) {
@@ -370,9 +389,13 @@ export function parseIcsContent(icsText: string): IcsParseResult {
             : undefined;
           const cleanedLoc = location ? unescapeIcsText(location) : undefined;
           const tz = dtStart.timezone || calendarTimezone;
+          const uniqueExdates = Array.from(new Set(exdates)).sort();
+          const effectiveUid =
+            recurrenceId && uid ? `${uid}__${recurrenceId.dateKey}` : uid;
+          const effectiveRrule = recurrenceId ? undefined : rrule;
 
           events.push({
-            ...(uid ? { uid } : {}),
+            ...(effectiveUid ? { uid: effectiveUid } : {}),
             title: title || '(No title)',
             ...(cleanedDesc ? { description: cleanedDesc } : {}),
             ...(cleanedLoc ? { location: cleanedLoc } : {}),
@@ -381,6 +404,10 @@ export function parseIcsContent(icsText: string): IcsParseResult {
             allDay,
             ...(tz ? { timezone: tz } : {}),
             category: mapIcsCategory(nexusCategory, categoriesRaw),
+            ...(effectiveRrule ? { rrule: effectiveRrule } : {}),
+            ...(uniqueExdates.length > 0 && !recurrenceId
+              ? { exdates: uniqueExdates }
+              : {}),
           });
         }
       }
@@ -433,6 +460,33 @@ export function parseIcsContent(icsText: string): IcsParseResult {
       case 'X-NEXUS-CATEGORY':
         nexusCategory = prop.value;
         break;
+      case 'RRULE': {
+        const cleanedRule = prop.value.trim().replace(/^RRULE:/i, '');
+        if (parseRrule(cleanedRule)) {
+          rrule = cleanedRule;
+        }
+        break;
+      }
+      case 'EXDATE': {
+        for (const token of prop.value.split(',')) {
+          const parsedEx = parseIcsDateValue(
+            token,
+            prop.params,
+            calendarTimezone,
+          );
+          if (parsedEx) {
+            exdates.push(parsedEx.dateKey);
+          }
+        }
+        break;
+      }
+      case 'RECURRENCE-ID':
+        recurrenceId = parseIcsDateValue(
+          prop.value,
+          prop.params,
+          calendarTimezone,
+        );
+        break;
       case 'DTSTART':
         dtStart = parseIcsDateValue(prop.value, prop.params, calendarTimezone);
         break;
@@ -447,7 +501,21 @@ export function parseIcsContent(icsText: string): IcsParseResult {
     }
   }
 
-  return { events, skippedCancelled, warnings };
+  // Merge RECURRENCE-ID override dates as EXDATEs on their master recurring series
+  const mergedEvents = events.map((ev) => {
+    if (!ev.uid || !ev.rrule) return ev;
+    const overrideDates = overridesByMasterUid.get(ev.uid);
+    if (!overrideDates || overrideDates.size === 0) return ev;
+    const combined = Array.from(
+      new Set([...(ev.exdates ?? []), ...overrideDates]),
+    ).sort();
+    return {
+      ...ev,
+      exdates: combined,
+    };
+  });
+
+  return { events: mergedEvents, skippedCancelled, warnings };
 }
 
 /**
@@ -561,6 +629,16 @@ export function exportEventsToIcs(
     }
     if (ev.location) {
       lines.push(foldIcsLine(`LOCATION:${escapeIcsText(ev.location)}`));
+    }
+    if (ev.rrule) {
+      lines.push(foldIcsLine(`RRULE:${ev.rrule}`));
+    }
+    if (ev.exdates && ev.exdates.length > 0) {
+      lines.push(
+        foldIcsLine(
+          `EXDATE;VALUE=DATE:${ev.exdates.map((d) => d.replace(/-/g, '')).join(',')}`,
+        ),
+      );
     }
     lines.push(`CATEGORIES:${ev.category.toUpperCase()}`);
     lines.push(`X-NEXUS-CATEGORY:${ev.category}`);

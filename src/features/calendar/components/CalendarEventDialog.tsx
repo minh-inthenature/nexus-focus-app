@@ -5,6 +5,7 @@ import {
   FilePlus2,
   FileText,
   Globe,
+  Repeat,
   Trash2,
   X,
 } from 'lucide-react';
@@ -28,8 +29,20 @@ import {
   getEventDateRange,
   getLocalTimezone,
   getTodayDateKey,
+  isValidDateKey,
   validateEventRange,
 } from '@/features/calendar/utils/calendarDateUtils';
+import {
+  buildRrule,
+  dateKeyToWeekdayCode,
+  formatRruleLabel,
+  parseRrule,
+  WEEKDAY_CODES_MONDAY_FIRST,
+  WEEKDAY_LONG_NAMES,
+  WEEKDAY_SHORT_NAMES,
+  type RecurrenceFreq,
+  type WeekdayCode,
+} from '@/features/calendar/utils/recurrence';
 import type {
   CalendarEventRecord,
   EventCategory,
@@ -58,15 +71,121 @@ export interface CalendarEventDialogProps {
     color: string;
     linkedNoteIds: string[];
     linkedTaskIds: string[];
+    rrule: string | null;
   }) => Promise<void>;
   onDelete?: (eventId: string) => Promise<void>;
   onClose: () => void;
 }
 
+type RepeatPreset =
+  | 'none'
+  | 'daily'
+  | 'weekdays'
+  | 'weekly'
+  | 'biweekly'
+  | 'monthly'
+  | 'yearly'
+  | 'custom';
+
+function detectRepeatState(
+  rrule: string | undefined,
+  startDateKey: string,
+): {
+  preset: RepeatPreset;
+  customFreq: RecurrenceFreq;
+  customInterval: number;
+  customWeekdays: WeekdayCode[];
+  untilDateKey: string;
+  customTouched: boolean;
+} {
+  const startWeekday = dateKeyToWeekdayCode(startDateKey);
+  const startDay = Number(startDateKey.slice(8, 10)) || 1;
+  if (!rrule) {
+    return {
+      preset: 'none',
+      customFreq: 'WEEKLY',
+      customInterval: 1,
+      customWeekdays: [startWeekday],
+      untilDateKey: '',
+      customTouched: false,
+    };
+  }
+
+  const parsed = parseRrule(rrule);
+  if (!parsed) {
+    return {
+      preset: 'custom',
+      customFreq: 'WEEKLY',
+      customInterval: 1,
+      customWeekdays: [startWeekday],
+      untilDateKey: '',
+      customTouched: false,
+    };
+  }
+
+  const days = parsed.byDay?.map((d) => d.weekday) ?? [];
+  const hasOrdinals = parsed.byDay?.some((d) => d.nth !== undefined) ?? false;
+  const untilDateKey = parsed.untilDateKey ?? '';
+  let preset: RepeatPreset = 'custom';
+
+  if (parsed.count === undefined && !hasOrdinals) {
+    if (
+      parsed.freq === 'DAILY' &&
+      parsed.interval === 1 &&
+      days.length === 0 &&
+      !parsed.byMonthDay
+    ) {
+      preset = 'daily';
+    } else if (
+      parsed.freq === 'WEEKLY' &&
+      parsed.interval === 1 &&
+      days.join(',') === 'MO,TU,WE,TH,FR'
+    ) {
+      preset = 'weekdays';
+    } else if (
+      parsed.freq === 'WEEKLY' &&
+      parsed.interval === 1 &&
+      (days.length === 0 || (days.length === 1 && days[0] === startWeekday))
+    ) {
+      preset = 'weekly';
+    } else if (
+      parsed.freq === 'WEEKLY' &&
+      parsed.interval === 2 &&
+      (days.length === 0 || (days.length === 1 && days[0] === startWeekday))
+    ) {
+      preset = 'biweekly';
+    } else if (
+      parsed.freq === 'MONTHLY' &&
+      parsed.interval === 1 &&
+      days.length === 0 &&
+      (!parsed.byMonthDay ||
+        (parsed.byMonthDay.length === 1 && parsed.byMonthDay[0] === startDay))
+    ) {
+      preset = 'monthly';
+    } else if (
+      parsed.freq === 'YEARLY' &&
+      parsed.interval === 1 &&
+      days.length === 0 &&
+      !parsed.byMonthDay
+    ) {
+      preset = 'yearly';
+    }
+  }
+
+  return {
+    preset,
+    customFreq: parsed.freq,
+    customInterval: parsed.interval,
+    customWeekdays: days.length > 0 ? days : [startWeekday],
+    untilDateKey,
+    customTouched: false,
+  };
+}
+
 /**
  * Full event creation & editing modal handling all-day canonical UTC ranges,
- * local timezone conversion for timed events, validation, Note/Task linking,
- * creating a note directly from an event, and delete confirmation.
+ * local timezone conversion for timed events, recurrence (`RRULE`), validation,
+ * Note/Task linking, creating a note directly from an event, and deletion.
  */
 export function CalendarEventDialog({
   open,
@@ -88,6 +207,12 @@ export function CalendarEventDialog({
   const [endDateKey, setEndDateKey] = useState(selectedDate);
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:00');
+  const [repeatPreset, setRepeatPreset] = useState<RepeatPreset>('none');
+  const [customFreq, setCustomFreq] = useState<RecurrenceFreq>('WEEKLY');
+  const [customInterval, setCustomInterval] = useState(1);
+  const [customWeekdays, setCustomWeekdays] = useState<WeekdayCode[]>(['MO']);
+  const [untilDateKey, setUntilDateKey] = useState('');
+  const [customTouched, setCustomTouched] = useState(false);
   const [category, setCategory] = useState<EventCategory>('personal');
   const [color, setColor] = useState<string>('default');
   const [linkedNoteIds, setLinkedNoteIds] = useState<string[]>([]);
@@ -120,6 +245,13 @@ export function CalendarEventDialog({
         event.allDay ? '09:00' : formatLocalTimeHHMM(event.startAt),
       );
       setEndTime(event.allDay ? '10:00' : formatLocalTimeHHMM(event.endAt));
+      const rep = detectRepeatState(event.rrule, range.startDateKey);
+      setRepeatPreset(rep.preset);
+      setCustomFreq(rep.customFreq);
+      setCustomInterval(rep.customInterval);
+      setCustomWeekdays(rep.customWeekdays);
+      setUntilDateKey(rep.untilDateKey);
+      setCustomTouched(rep.customTouched);
       setCategory(event.category);
       setColor(event.color ?? 'default');
       setLinkedNoteIds([...event.linkedNoteIds]);
@@ -145,6 +277,13 @@ export function CalendarEventDialog({
       setEndDateKey(baseEndDate);
       setStartTime(baseStartTime);
       setEndTime(draftDefaults?.endTime ?? defaultEnd.time);
+      const rep = detectRepeatState(undefined, baseStartDate);
+      setRepeatPreset(rep.preset);
+      setCustomFreq(rep.customFreq);
+      setCustomInterval(rep.customInterval);
+      setCustomWeekdays(rep.customWeekdays);
+      setUntilDateKey('');
+      setCustomTouched(false);
       setCategory('personal');
       setColor('default');
       setLinkedNoteIds([...(draftDefaults?.linkedNoteIds ?? [])]);
@@ -161,6 +300,81 @@ export function CalendarEventDialog({
   const availableTasksToLink = tasks.filter(
     (t) => !linkedTaskIds.includes(t.id),
   );
+
+  const startWeekdayCode = dateKeyToWeekdayCode(startDateKey);
+  const startWeekdayName = WEEKDAY_LONG_NAMES[startWeekdayCode];
+  const startDayOfMonth = isValidDateKey(startDateKey)
+    ? Number(startDateKey.slice(8, 10))
+    : 1;
+
+  const computedRrule: string | null = (() => {
+    const endOpt =
+      untilDateKey && isValidDateKey(untilDateKey) ? untilDateKey : undefined;
+    switch (repeatPreset) {
+      case 'none':
+        return null;
+      case 'daily':
+        return buildRrule({ freq: 'DAILY', untilDateKey: endOpt });
+      case 'weekdays':
+        return buildRrule({
+          freq: 'WEEKLY',
+          byDay: ['MO', 'TU', 'WE', 'TH', 'FR'],
+          untilDateKey: endOpt,
+        });
+      case 'weekly':
+        return buildRrule({
+          freq: 'WEEKLY',
+          byDay: [startWeekdayCode],
+          untilDateKey: endOpt,
+        });
+      case 'biweekly':
+        return buildRrule({
+          freq: 'WEEKLY',
+          interval: 2,
+          byDay: [startWeekdayCode],
+          untilDateKey: endOpt,
+        });
+      case 'monthly':
+        return buildRrule({
+          freq: 'MONTHLY',
+          byMonthDay: [startDayOfMonth],
+          untilDateKey: endOpt,
+        });
+      case 'yearly':
+        return buildRrule({ freq: 'YEARLY', untilDateKey: endOpt });
+      case 'custom': {
+        if (!customTouched && event?.rrule) {
+          return event.rrule;
+        }
+        return buildRrule({
+          freq: customFreq,
+          interval: customInterval,
+          ...(customFreq === 'WEEKLY'
+            ? {
+                byDay:
+                  customWeekdays.length > 0
+                    ? customWeekdays
+                    : [startWeekdayCode],
+              }
+            : {}),
+          ...(customFreq === 'MONTHLY'
+            ? { byMonthDay: [startDayOfMonth] }
+            : {}),
+          untilDateKey: endOpt,
+        });
+      }
+    }
+  })();
+
+  const handleToggleWeekday = (code: WeekdayCode) => {
+    setCustomTouched(true);
+    setCustomWeekdays((prev) => {
+      if (prev.includes(code)) {
+        return prev.length > 1 ? prev.filter((c) => c !== code) : prev;
+      }
+      return [...prev, code];
+    });
+  };
 
   const handleToggleAllDay = (checked: boolean) => {
     setAllDay(checked);
@@ -236,6 +450,7 @@ export function CalendarEventDialog({
         color,
         linkedNoteIds,
         linkedTaskIds,
+        rrule: computedRrule,
       });
       onClose();
     } catch (err) {
@@ -267,9 +482,15 @@ export function CalendarEventDialog({
               {event ? 'Edit Event' : 'New Event'}
             </DialogTitle>
             {event?.googleEventId ? (
-              <span className="rounded-lg border border-focus-accent/50 bg-focus-surface px-2 py-0.5 text-[10px] font-medium text-focus-foreground">
-                Synced with Google Calendar
-              </span>
+              event.googleEventId.startsWith('ics:') ? (
+                <span className="rounded-lg border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  Imported from .ics
+                </span>
+              ) : (
+                <span className="rounded-lg border border-focus-accent/50 bg-focus-surface px-2 py-0.5 text-[10px] font-medium text-focus-foreground">
+                  Synced with Google Calendar
+                </span>
+              )
             ) : null}
           </div>
           <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
@@ -345,7 +566,7 @@ export function CalendarEventDialog({
                   onChange={(e) => {
                     const nextStart = e.target.value;
                     setStartDateKey(nextStart);
-                    if (endDateKey < nextStart) {
+                    if (endDateKey === startDateKey || endDateKey < nextStart) {
                       setEndDateKey(nextStart);
                     }
                   }}
@@ -405,6 +626,144 @@ export function CalendarEventDialog({
                 </div>
               </div>
             ) : null}
+
+            {/* Repeat / Recurrence */}
+            <div className="space-y-2 rounded-lg border border-border bg-background/50 p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="event-repeat-select"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                  >
+                    <Repeat className="h-3 w-3" aria-hidden="true" />
+                    <span>Repeat</span>
+                  </label>
+                  <select
+                    id="event-repeat-select"
+                    value={repeatPreset}
+                    onChange={(e) => {
+                      const next = e.target.value as RepeatPreset;
+                      setRepeatPreset(next);
+                      setCustomTouched(true);
+                      if (next === 'custom' && customWeekdays.length === 0) {
+                        setCustomWeekdays([startWeekdayCode]);
+                      }
+                    }}
+                    className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                  >
+                    <option value="none">Does not repeat</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekdays">Every weekday (Mon – Fri)</option>
+                    <option value="weekly">Weekly on {startWeekdayName}</option>
+                    <option value="biweekly">
+                      Every 2 weeks on {startWeekdayName}
+                    </option>
+                    <option value="monthly">
+                      Monthly on day {startDayOfMonth}
+                    </option>
+                    <option value="yearly">Annually</option>
+                    <option value="custom">Custom…</option>
+                  </select>
+                </div>
+
+                {repeatPreset !== 'none' ? (
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="event-repeat-until"
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      Ends on (optional)
+                    </label>
+                    <input
+                      id="event-repeat-until"
+                      type="date"
+                      value={untilDateKey}
+                      min={startDateKey}
+                      onChange={(e) => {
+                        setCustomTouched(true);
+                        setUntilDateKey(e.target.value);
+                      }}
+                      className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              {repeatPreset === 'custom' ? (
+                <div className="space-y-2.5 border-t border-border/70 pt-2.5">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Every</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      aria-label="Repeat interval"
+                      value={customInterval}
+                      onChange={(e) => {
+                        setCustomTouched(true);
+                        const n = Number.parseInt(e.target.value, 10);
+                        setCustomInterval(
+                          Number.isFinite(n) && n >= 1 ? Math.min(99, n) : 1,
+                        );
+                      }}
+                      className="h-7 w-14 rounded-md border border-border bg-background px-2 text-center text-xs text-foreground tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <select
+                      aria-label="Repeat frequency"
+                      value={customFreq}
+                      onChange={(e) => {
+                        setCustomTouched(true);
+                        setCustomFreq(e.target.value as RecurrenceFreq);
+                      }}
+                      className="h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                    >
+                      <option value="DAILY">
+                        {customInterval === 1 ? 'day' : 'days'}
+                      </option>
+                      <option value="WEEKLY">
+                        {customInterval === 1 ? 'week' : 'weeks'}
+                      </option>
+                      <option value="MONTHLY">
+                        {customInterval === 1 ? 'month' : 'months'}
+                      </option>
+                      <option value="YEARLY">
+                        {customInterval === 1 ? 'year' : 'years'}
+                      </option>
+                    </select>
+                  </div>
+
+                  {customFreq === 'WEEKLY' ? (
+                    <div className="flex flex-wrap items-center gap-1">
+                      {WEEKDAY_CODES_MONDAY_FIRST.map((code) => {
+                        const selected = customWeekdays.includes(code);
+                        return (
+                          <button
+                            key={code}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => handleToggleWeekday(code)}
+                            className={cn(
+                              'rounded-md border px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer',
+                              selected
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border bg-background text-muted-foreground hover:text-foreground',
+                            )}
+                          >
+                            {WEEKDAY_SHORT_NAMES[code]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {computedRrule ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {formatRruleLabel(computedRrule, startDateKey)}
+                </p>
+              ) : null}
+            </div>
 
             {/* Category & Subtle Color */}
             <div className="grid grid-cols-2 gap-3">

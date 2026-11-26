@@ -108,6 +108,8 @@ export interface CalendarEventRecord {
   readonly color?: string;
   readonly linkedNoteIds: readonly EntityId[];
   readonly linkedTaskIds: readonly EntityId[];
+  readonly rrule?: string;
+  readonly exdates?: readonly string[];
   readonly googleEventId?: string;
   readonly googleCalendarId?: string;
   readonly googleEtag?: string;

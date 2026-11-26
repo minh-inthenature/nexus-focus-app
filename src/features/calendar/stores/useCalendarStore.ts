@@ -370,7 +370,10 @@ export const useCalendarStore = create<CalendarStoreState>()(
                   uidMatch.endAt === ev.endAt &&
                   uidMatch.allDay === ev.allDay &&
                   (uidMatch.description ?? '') === (ev.description ?? '') &&
-                  (uidMatch.location ?? '') === (ev.location ?? '');
+                  (uidMatch.location ?? '') === (ev.location ?? '') &&
+                  (uidMatch.rrule ?? '') === (ev.rrule ?? '') &&
+                  JSON.stringify(uidMatch.exdates ?? []) ===
+                    JSON.stringify(ev.exdates ?? []);
 
                 if (unchanged) {
                   skipped += 1;
@@ -383,6 +386,8 @@ export const useCalendarStore = create<CalendarStoreState>()(
                     endAt: ev.endAt,
                     allDay: ev.allDay,
                     ...(ev.timezone ? { timezone: ev.timezone } : {}),
+                    rrule: ev.rrule ?? null,
+                    exdates: ev.exdates ? [...ev.exdates] : null,
                   });
                   if (ev.uid) byUid.set(ev.uid, patched);
                   bySignature.set(makeSig(patched), patched);
@@ -392,7 +397,21 @@ export const useCalendarStore = create<CalendarStoreState>()(
               }
 
               if (sigMatch) {
-                skipped += 1;
+                if (
+                  ev.rrule &&
+                  ((sigMatch.rrule ?? '') !== ev.rrule ||
+                    JSON.stringify(sigMatch.exdates ?? []) !==
+                      JSON.stringify(ev.exdates ?? []))
+                ) {
+                  const upgraded = await repoUpdateEvent(sigMatch.id, {
+                    rrule: ev.rrule,
+                    exdates: ev.exdates ? [...ev.exdates] : null,
+                  });
+                  bySignature.set(makeSig(upgraded), upgraded);
+                  updated += 1;
+                } else {
+                  skipped += 1;
+                }
                 continue;
               }
 
@@ -406,6 +425,8 @@ export const useCalendarStore = create<CalendarStoreState>()(
                 allDay: ev.allDay,
                 ...(ev.timezone ? { timezone: ev.timezone } : {}),
                 category: ev.category,
+                ...(ev.rrule ? { rrule: ev.rrule } : {}),
+                ...(ev.exdates ? { exdates: [...ev.exdates] } : {}),
               });
 
               if (ev.uid) {

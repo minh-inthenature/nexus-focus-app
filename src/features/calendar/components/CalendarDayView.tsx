@@ -5,6 +5,7 @@ import {
   ExternalLink,
   MapPin,
   Plus,
+  Repeat,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -119,7 +120,7 @@ export function CalendarDayView({
             const accent = getEventAccentClasses(ev.category, ev.color);
             return (
               <div
-                key={ev.id}
+                key={`${ev.id}-${ev.startAt}`}
                 className={cn(
                   'flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs',
                   accent.surfaceClass,
@@ -282,7 +283,7 @@ export function CalendarDayView({
 
                 return (
                   <button
-                    key={event.id}
+                    key={`${event.id}-${event.startAt}`}
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -334,7 +335,7 @@ export function CalendarDayView({
           <div className="space-y-1.5">
             {timedEvents.map((ev) => (
               <div
-                key={ev.id}
+                key={`${ev.id}-${ev.startAt}`}
                 className="flex flex-wrap items-center justify-between gap-2 text-xs"
               >
                 <div className="flex items-center gap-2">
@@ -348,6 +349,12 @@ export function CalendarDayView({
                   >
                     {ev.title}
                   </button>
+                  {ev.rrule ? (
+                    <Repeat
+                      className="h-3 w-3 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  ) : null}
                 </div>
                 <span className="text-muted-foreground">
                   {CATEGORY_LABELS[ev.category]}
