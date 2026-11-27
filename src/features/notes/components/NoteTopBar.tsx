@@ -13,6 +13,8 @@ import {
   Maximize2,
   Menu,
   Minimize2,
+  PanelBottomClose,
+  PanelBottomOpen,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
@@ -46,8 +48,10 @@ export interface NoteTopBarProps {
   isFullscreen: boolean;
   explorerCollapsed: boolean;
   mobileExplorerOpen: boolean;
+  metadataPanelCollapsed: boolean;
   onToggleExplorer: () => void;
   onToggleMobileExplorer: () => void;
+  onToggleMetadataPanel: () => void;
   onRenameNote: (newTitle: string) => Promise<void>;
   onMoveNote: (folderId: string | null) => Promise<void>;
   onToggleFavorite: () => Promise<void>;
@@ -74,8 +78,10 @@ export function NoteTopBar({
   isFullscreen,
   explorerCollapsed,
   mobileExplorerOpen,
+  metadataPanelCollapsed,
   onToggleExplorer,
   onToggleMobileExplorer,
+  onToggleMetadataPanel,
   onRenameNote,
   onMoveNote,
   onToggleFavorite,
@@ -553,6 +559,24 @@ export function NoteTopBar({
             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
           >
             <Download className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleMetadataPanel}
+            title="Toggle metadata panel"
+            aria-label="Toggle metadata panel"
+            aria-pressed={metadataPanelCollapsed}
+            className={cn(
+              'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer',
+              metadataPanelCollapsed && 'bg-accent text-foreground',
+            )}
+          >
+            {metadataPanelCollapsed ? (
+              <PanelBottomOpen className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <PanelBottomClose className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
           </button>
 
           <button

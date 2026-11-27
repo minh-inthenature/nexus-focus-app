@@ -7,9 +7,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Hash, Trash2 } from 'lucide-react';
+import { ChevronUp, Hash, Trash2 } from 'lucide-react';
+import { useCalendarStore } from '@/features/calendar/stores/useCalendarStore';
 import type { CodeDiagnosticsSummary } from '@/features/notes/hooks/useCodeDiagnostics';
 import { useNotesStore } from '@/features/notes/stores/useNotesStore';
+import { useTasksStore } from '@/features/tasks/stores/useTasksStore';
 import {
   getCanvasElementCount,
   isCanvasNote,
@@ -108,12 +110,14 @@ export function NoteEditorWorkspace({
     isFullscreen,
     explorerCollapsed,
     mobileExplorerOpen,
+    metadataPanelCollapsed,
     setSaveStatus,
     setEditorMode,
     toggleEditorMode,
     toggleFullscreen,
     toggleExplorer,
     toggleMobileExplorer,
+    toggleMetadataPanel,
     saveNoteContent,
     renameNote,
     updateNoteLanguage,
@@ -335,6 +339,27 @@ export function NoteEditorWorkspace({
     setEditorMode(mode);
   };
 
+  const tasks = useTasksStore((state) => state.tasks);
+  const initializeTasks = useTasksStore((state) => state.initialize);
+  const events = useCalendarStore((state) => state.events);
+  const initializeEvents = useCalendarStore((state) => state.initialize);
+
+  useEffect(() => {
+    if (metadataPanelCollapsed) {
+      void initializeTasks();
+      void initializeEvents();
+    }
+  }, [metadataPanelCollapsed, initializeTasks, initializeEvents]);
+
+  const linkedTasksCount = useMemo(
+    () => tasks.filter((t) => t.linkedNoteIds.includes(note.id)).length,
+    [tasks, note.id],
+  );
+  const linkedEventsCount = useMemo(
+    () => events.filter((ev) => ev.linkedNoteIds.includes(note.id)).length,
+    [events, note.id],
+  );
+
   const metrics = useMemo(() => countWordsAndChars(draftContent), [draftContent]);
   const lineMetrics = useMemo(
     () => (codeMode ? countLinesAndChars(draftContent) : null),
@@ -371,8 +396,10 @@ export function NoteEditorWorkspace({
         isFullscreen={isFullscreen}
         explorerCollapsed={explorerCollapsed}
         mobileExplorerOpen={mobileExplorerOpen}
+        metadataPanelCollapsed={metadataPanelCollapsed}
         onToggleExplorer={toggleExplorer}
         onToggleMobileExplorer={toggleMobileExplorer}
+        onToggleMetadataPanel={toggleMetadataPanel}
         onRenameNote={async (newTitle) => {
           await flushPendingSave();
           await renameNote(note.id, newTitle);
@@ -549,17 +576,48 @@ export function NoteEditorWorkspace({
         </div>
       ) : null}
 
-      <LinkedTasksPanel noteId={note.id} />
+      {metadataPanelCollapsed ? (
+        <div
+          data-testid="collapsed-metadata-bar"
+          className="shrink-0 border-t border-border bg-card/30 px-4 py-1.5 transition-all duration-200 md:px-10"
+        >
+          <button
+            type="button"
+            onClick={toggleMetadataPanel}
+            aria-label="Expand metadata panel"
+            className="flex w-full items-center justify-between gap-2 text-left text-[11px] text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+          >
+            <span className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar whitespace-nowrap font-mono">
+              <span>Tasks ({linkedTasksCount})</span>
+              <span aria-hidden="true">•</span>
+              <span>Events ({linkedEventsCount})</span>
+              <span aria-hidden="true">•</span>
+              <span>Backlinks ({backlinks.length})</span>
+            </span>
+            <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px]">
+              <span className="hidden sm:inline">Expand</span>
+              <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
+          </button>
+        </div>
+      ) : (
+        <div
+          data-testid="expanded-metadata-panels"
+          className="shrink-0 transition-all duration-200"
+        >
+          <LinkedTasksPanel noteId={note.id} />
 
-      <LinkedEventsPanel noteId={note.id} />
+          <LinkedEventsPanel noteId={note.id} />
 
-      <BacklinksPanel
-        backlinks={backlinks}
-        folders={folders}
-        onOpenNote={(targetId) => {
-          void flushPendingSave().then(() => setActiveNoteId(targetId));
-        }}
-      />
+          <BacklinksPanel
+            backlinks={backlinks}
+            folders={folders}
+            onOpenNote={(targetId) => {
+              void flushPendingSave().then(() => setActiveNoteId(targetId));
+            }}
+          />
+        </div>
+      )}
 
       {/* Footer Metrics */}
       <footer className="flex items-center justify-between border-t border-border bg-background px-4 py-1.5 text-[11px] text-muted-foreground md:px-10">

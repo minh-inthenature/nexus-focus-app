@@ -92,6 +92,7 @@ export function NotesExplorer({
     renameFolder,
     renameNote,
     moveNote,
+    toggleFavorite,
     deleteFolder,
     openDailyNote,
     importFiles,
@@ -532,6 +533,9 @@ export function NotesExplorer({
               }}
               onRenameNote={async (noteId, title) => {
                 await renameNote(noteId, title);
+              }}
+              onToggleFavorite={async (noteId) => {
+                await toggleFavorite(noteId);
               }}
               onMoveNote={async (noteId, folderId) => {
                 await moveNote(noteId, folderId);

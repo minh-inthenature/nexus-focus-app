@@ -49,6 +49,7 @@ interface NotesStoreState {
   isFullscreen: boolean;
   explorerCollapsed: boolean;
   mobileExplorerOpen: boolean;
+  metadataPanelCollapsed: boolean;
   expandedFolderIds: string[];
   searchQuery: string;
   selectedTag: string | null;
@@ -68,6 +69,8 @@ interface NotesStoreState {
   setExplorerCollapsed: (collapsed: boolean) => void;
   toggleMobileExplorer: () => void;
   setMobileExplorerOpen: (open: boolean) => void;
+  toggleMetadataPanel: () => void;
+  setMetadataPanelCollapsed: (collapsed: boolean) => void;
   toggleFolderExpanded: (folderId: string) => void;
   expandFolder: (folderId: string) => void;
   setSearchQuery: (query: string) => void;
@@ -114,6 +117,7 @@ export const useNotesStore = create<NotesStoreState>()(
       isFullscreen: false,
       explorerCollapsed: false,
       mobileExplorerOpen: false,
+      metadataPanelCollapsed: false,
       expandedFolderIds: [],
       searchQuery: '',
       selectedTag: null,
@@ -206,6 +210,14 @@ export const useNotesStore = create<NotesStoreState>()(
         set((state) => ({ mobileExplorerOpen: !state.mobileExplorerOpen })),
 
       setMobileExplorerOpen: (open) => set({ mobileExplorerOpen: open }),
+
+      toggleMetadataPanel: () =>
+        set((state) => ({
+          metadataPanelCollapsed: !state.metadataPanelCollapsed,
+        })),
+
+      setMetadataPanelCollapsed: (collapsed) =>
+        set({ metadataPanelCollapsed: collapsed }),
 
       toggleFolderExpanded: (folderId) =>
         set((state) => ({
@@ -403,6 +415,7 @@ export const useNotesStore = create<NotesStoreState>()(
       name: NOTES_UI_STORAGE_KEY,
       partialize: (state) => ({
         explorerCollapsed: state.explorerCollapsed,
+        metadataPanelCollapsed: state.metadataPanelCollapsed,
         expandedFolderIds: state.expandedFolderIds,
       }),
     },

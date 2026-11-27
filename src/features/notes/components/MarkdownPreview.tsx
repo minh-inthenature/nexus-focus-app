@@ -1,5 +1,4 @@
 import { isValidElement, useEffect, useMemo, useState, type ReactNode } from 'react';
-import 'katex/dist/katex.min.css';
 import { FileDown, Paperclip } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';

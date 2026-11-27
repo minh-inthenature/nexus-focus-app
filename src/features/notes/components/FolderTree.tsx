@@ -34,6 +34,7 @@ export interface FolderTreeProps {
   onCreateSubfolder: (parentId: string | null, name: string) => Promise<void>;
   onRenameFolder: (folderId: string, name: string) => Promise<void>;
   onRenameNote: (noteId: string, title: string) => Promise<void>;
+  onToggleFavorite: (noteId: string) => Promise<void>;
   onMoveNote: (noteId: string, targetFolderId: string | null) => Promise<void>;
   onRequestDeleteFolder: (folder: FolderRecord) => void;
 }
@@ -55,6 +56,19 @@ function sortByName<T extends { name?: string; title?: string }>(
 }
 
 /**
+ * Sorts notes within a folder so starred notes are pinned at the top,
+ * preserving alphabetical order within starred and unstarred groups.
+ */
+export function sortTreeNotes(notes: readonly NoteRecord[]): NoteRecord[] {
+  return [...notes].sort((a, b) => {
+    if (a.isFavorite !== b.isFavorite) {
+      return a.isFavorite ? -1 : 1;
+    }
+    return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+  });
+}
+
+/**
  * Recursive Obsidian-inspired folder and note tree supporting nested folders,
  * alphabetical sorting, inline rename, drag-and-drop moves, and UUID identity.
  */
@@ -69,6 +83,7 @@ export function FolderTree({
   onCreateSubfolder,
   onRenameFolder,
   onRenameNote,
+  onToggleFavorite,
   onMoveNote,
   onRequestDeleteFolder,
 }: FolderTreeProps) {
@@ -192,30 +207,52 @@ export function FolderTree({
                   {codeMeta.badge}
                 </span>
               ) : null}
-              {note.isFavorite ? (
-                <Star
-                  className="h-3 w-3 shrink-0 fill-current text-muted-foreground"
-                  aria-hidden="true"
-                />
-              ) : null}
             </button>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditing({
-                  kind: 'rename-note',
-                  id: note.id,
-                  value: note.title,
-                });
-              }}
-              aria-label={`Rename ${note.title}`}
-              title="Rename note"
-              className="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground group-hover:flex hover:bg-background/60 hover:text-foreground cursor-pointer"
-            >
-              <Pencil className="h-3 w-3" aria-hidden="true" />
-            </button>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void onToggleFavorite(note.id);
+                }}
+                aria-label={
+                  note.isFavorite
+                    ? `Unstar ${note.title}`
+                    : `Star ${note.title}`
+                }
+                aria-pressed={note.isFavorite}
+                title={note.isFavorite ? 'Remove from Starred' : 'Star note'}
+                className={cn(
+                  'h-5 w-5 shrink-0 items-center justify-center rounded transition-colors cursor-pointer hover:bg-background/60',
+                  note.isFavorite
+                    ? 'flex text-amber-500'
+                    : 'hidden text-muted-foreground group-hover:flex hover:text-amber-500',
+                )}
+              >
+                <Star
+                  className={cn('h-3 w-3', note.isFavorite && 'fill-current')}
+                  aria-hidden="true"
+                />
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditing({
+                    kind: 'rename-note',
+                    id: note.id,
+                    value: note.title,
+                  });
+                }}
+                aria-label={`Rename ${note.title}`}
+                title="Rename note"
+                className="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground group-hover:flex hover:bg-background/60 hover:text-foreground cursor-pointer"
+              >
+                <Pencil className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -226,7 +263,7 @@ export function FolderTree({
     const childFolders = sortByName(
       folders.filter((f) => f.parentId === parentId),
     );
-    const childNotes = sortByName(
+    const childNotes = sortTreeNotes(
       notes.filter((n) => n.folderId === parentId),
     );
 
