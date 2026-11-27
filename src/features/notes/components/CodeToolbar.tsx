@@ -100,10 +100,10 @@ export function CodeToolbar({
     <div
       role="toolbar"
       aria-label="Code file utilities"
-      className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-background px-4 py-1.5"
+      className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto no-scrollbar border-b border-border bg-background px-3 py-1.5 md:flex-wrap md:overflow-visible md:px-4"
     >
       {/* Left: Language Switcher */}
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
           <Code2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span className="hidden sm:inline">Language</span>
@@ -123,7 +123,7 @@ export function CodeToolbar({
       </div>
 
       {/* Right: Syntax Check Indicator + Copy Code */}
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <div ref={popoverRef} className="relative">
           <button
             type="button"
@@ -161,7 +161,7 @@ export function CodeToolbar({
             <div
               role="region"
               aria-label="Syntax diagnostics"
-              className="absolute right-0 top-8 z-40 w-72 rounded-md border border-border bg-popover p-1.5 shadow-lg"
+              className="fixed right-3 top-36 z-40 w-[min(18rem,calc(100vw-1.5rem))] rounded-md border border-border bg-popover p-1.5 shadow-lg md:absolute md:right-0 md:top-8 md:w-72"
             >
               <div className="border-b border-border px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 Syntax Diagnostics ({totalIssues})

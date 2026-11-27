@@ -106,7 +106,7 @@ export function CanvasNoteEditor({
   return (
     <div
       data-testid="canvas-note-editor"
-      className="nexus-excalidraw relative h-full min-h-[540px] w-full flex-1 overflow-hidden bg-background [.dark_&]:bg-[#141414]"
+      className="nexus-excalidraw relative h-full min-h-[320px] w-full flex-1 overflow-hidden bg-background md:min-h-[540px] [.dark_&]:bg-[#141414]"
     >
       <Excalidraw
         key={noteId}

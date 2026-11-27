@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import {
   CalendarPlus,
   FileText,
+  Menu,
   PanelLeftOpen,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -27,12 +28,15 @@ export function NotesPage() {
     notes,
     activeNoteId,
     explorerCollapsed,
+    mobileExplorerOpen,
     isFullscreen,
     initialized,
     loading,
     initialize,
     setActiveNoteId,
     toggleExplorer,
+    toggleMobileExplorer,
+    setMobileExplorerOpen,
     createNote,
     openDailyNote,
   } = useNotesStore();
@@ -51,6 +55,17 @@ export function NotesPage() {
   useEffect(() => {
     void initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    if (!mobileExplorerOpen) return;
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileExplorerOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mobileExplorerOpen, setMobileExplorerOpen]);
 
   // Bidirectional sync between URL `/notes/:noteId` and store `activeNoteId`
   useEffect(() => {
@@ -131,12 +146,47 @@ export function NotesPage() {
   return (
     <div
       className={cn(
-        'flex h-full w-full overflow-hidden bg-background',
+        'relative flex h-full w-full overflow-hidden bg-background',
         isFullscreen && 'fixed inset-0 z-50',
       )}
     >
+      {/* Desktop persistent collapsible Vault sidebar */}
       {!explorerCollapsed && !isFullscreen ? (
-        <NotesExplorer onBeforeSelectNote={flushActiveSave} />
+        <div className="hidden h-full md:flex">
+          <NotesExplorer onBeforeSelectNote={flushActiveSave} />
+        </div>
+      ) : null}
+
+      {/* Mobile slide-over Vault sidebar drawer (< 768px) */}
+      {!isFullscreen ? (
+        <div
+          className={cn(
+            'fixed inset-0 z-40 flex transition-opacity duration-200 md:hidden',
+            mobileExplorerOpen
+              ? 'pointer-events-auto opacity-100'
+              : 'pointer-events-none opacity-0',
+          )}
+          aria-hidden={!mobileExplorerOpen}
+        >
+          <div
+            role="presentation"
+            onClick={() => setMobileExplorerOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-[1px]"
+          />
+          <div
+            data-testid="mobile-vault-drawer"
+            className={cn(
+              'relative z-10 h-full w-72 max-w-[85vw] transform bg-background shadow-2xl transition-transform duration-200 ease-out pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]',
+              mobileExplorerOpen ? 'translate-x-0' : '-translate-x-full',
+            )}
+          >
+            <NotesExplorer
+              onBeforeSelectNote={flushActiveSave}
+              onCloseMobile={() => setMobileExplorerOpen(false)}
+              className="w-full"
+            />
+          </div>
+        </div>
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -148,19 +198,33 @@ export function NotesPage() {
           />
         ) : (
           <div className="flex h-full flex-col">
-            {explorerCollapsed ? (
-              <div className="border-b border-border px-4 py-2.5">
+            <div
+              className={cn(
+                'border-b border-border px-3 py-2 md:px-4 md:py-2.5',
+                explorerCollapsed ? 'block' : 'md:hidden',
+              )}
+            >
+              <button
+                type="button"
+                onClick={toggleMobileExplorer}
+                aria-label="Open vault sidebar"
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer md:hidden"
+              >
+                <Menu className="h-4 w-4" aria-hidden="true" />
+                <span>Vault files</span>
+              </button>
+              {explorerCollapsed ? (
                 <button
                   type="button"
                   onClick={toggleExplorer}
                   aria-label="Show notes explorer"
-                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+                  className="hidden items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer md:inline-flex"
                 >
                   <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
                   <span>Show explorer</span>
                 </button>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
 
             <div className="flex flex-1 items-center justify-center p-6">
               <EmptyState

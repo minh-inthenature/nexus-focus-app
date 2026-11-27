@@ -6,6 +6,16 @@
 -- Preserves user isolation via Supabase Row Level Security (`auth.uid() = user_id`).
 -- ==============================================================================
 
+CREATE OR REPLACE FUNCTION public.nexus_set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
 CREATE TABLE IF NOT EXISTS public.notes (
   id text NOT NULL,
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,

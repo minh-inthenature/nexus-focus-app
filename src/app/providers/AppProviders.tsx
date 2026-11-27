@@ -4,6 +4,10 @@ import { useCalendarStore } from '@/features/calendar/stores/useCalendarStore';
 import { useNotesStore } from '@/features/notes/stores/useNotesStore';
 import { useTasksStore } from '@/features/tasks/stores/useTasksStore';
 import { syncEngine } from '@/services';
+import {
+  configureNativeStatusBar,
+  registerNativeOAuthListener,
+} from '@/services/native/capacitor.service';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useDriveStore } from '@/stores/useDriveStore';
 import { useGoogleCalendarStore } from '@/stores/useGoogleCalendarStore';
@@ -17,6 +21,9 @@ export interface AppProvidersProps {
 
 function AuthAndDriveBoot({ children }: { children: ReactNode }) {
   const initializeAuth = useAuthStore((state) => state.initialize);
+  const completeNativeOAuthUrl = useAuthStore(
+    (state) => state.completeNativeOAuthUrl,
+  );
   const userId = useAuthStore((state) => state.session?.user.id);
   const driveStatus = useDriveStore((state) => state.connection.status);
   const notesFolderId = useDriveStore(
@@ -37,6 +44,14 @@ function AuthAndDriveBoot({ children }: { children: ReactNode }) {
   useEffect(() => {
     void initializeAuth();
   }, [initializeAuth]);
+
+  useEffect(() => {
+    void configureNativeStatusBar();
+  }, []);
+
+  useEffect(() => {
+    return registerNativeOAuthListener((url) => completeNativeOAuthUrl(url));
+  }, [completeNativeOAuthUrl]);
 
   useEffect(() => {
     syncEngine.configure({

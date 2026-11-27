@@ -11,6 +11,7 @@ import {
   FolderInput,
   Loader2,
   Maximize2,
+  Menu,
   Minimize2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -44,7 +45,9 @@ export interface NoteTopBarProps {
   editorMode: EditorMode;
   isFullscreen: boolean;
   explorerCollapsed: boolean;
+  mobileExplorerOpen: boolean;
   onToggleExplorer: () => void;
+  onToggleMobileExplorer: () => void;
   onRenameNote: (newTitle: string) => Promise<void>;
   onMoveNote: (folderId: string | null) => Promise<void>;
   onToggleFavorite: () => Promise<void>;
@@ -70,7 +73,9 @@ export function NoteTopBar({
   editorMode,
   isFullscreen,
   explorerCollapsed,
+  mobileExplorerOpen,
   onToggleExplorer,
+  onToggleMobileExplorer,
   onRenameNote,
   onMoveNote,
   onToggleFavorite,
@@ -143,25 +148,39 @@ export function NoteTopBar({
 
   return (
     <>
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-background px-4 py-2.5">
+      <header className="flex min-w-0 max-w-full flex-col gap-1.5 border-b border-border bg-background px-3 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-2 md:px-4 md:py-2.5">
         {/* Left: Explorer toggle + Title + Folder Selector */}
-        <div className="flex min-w-[200px] flex-1 items-center gap-2 overflow-hidden">
+        <div className="flex w-full min-w-0 flex-1 items-center gap-2 overflow-hidden md:w-auto md:min-w-[200px]">
           {!isFullscreen ? (
-            <button
-              type="button"
-              onClick={onToggleExplorer}
-              title={explorerCollapsed ? 'Show explorer' : 'Hide explorer'}
-              aria-label={
-                explorerCollapsed ? 'Show notes explorer' : 'Hide notes explorer'
-              }
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer"
-            >
-              {explorerCollapsed ? (
-                <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
-              )}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onToggleMobileExplorer}
+                title={mobileExplorerOpen ? 'Close vault sidebar' : 'Open vault sidebar'}
+                aria-label={
+                  mobileExplorerOpen ? 'Close vault sidebar' : 'Open vault sidebar'
+                }
+                aria-expanded={mobileExplorerOpen}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer md:hidden"
+              >
+                <Menu className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={onToggleExplorer}
+                title={explorerCollapsed ? 'Show explorer' : 'Hide explorer'}
+                aria-label={
+                  explorerCollapsed ? 'Show notes explorer' : 'Hide notes explorer'
+                }
+                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer md:flex"
+              >
+                {explorerCollapsed ? (
+                  <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
+            </>
           ) : null}
 
           <input
@@ -194,9 +213,9 @@ export function NoteTopBar({
         </div>
 
         {/* Right: Daily nav + Save status + Mode + Actions */}
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+        <div className="flex w-full shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar md:w-auto md:flex-wrap md:overflow-visible">
           {note.isDaily && note.dailyDate ? (
-            <div className="mr-1 flex items-center rounded-md border border-border bg-card">
+            <div className="mr-1 flex shrink-0 items-center rounded-md border border-border bg-card">
               <button
                 type="button"
                 onClick={() =>
@@ -231,7 +250,7 @@ export function NoteTopBar({
             aria-live="polite"
             title={saveError ?? undefined}
             className={cn(
-              'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium select-none',
+              'inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium whitespace-nowrap select-none',
               saveStatus === 'error'
                 ? 'text-destructive'
                 : saveStatus === 'unsaved'
@@ -417,7 +436,7 @@ export function NoteTopBar({
                   <div
                     role="region"
                     aria-label="Cloud sync status"
-                    className="absolute right-0 top-8 z-50 w-72 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg"
+                    className="fixed right-3 top-28 z-50 w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg md:absolute md:right-0 md:top-8 md:w-72"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex items-center gap-1.5 font-medium text-foreground">

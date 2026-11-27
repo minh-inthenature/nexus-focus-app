@@ -15,6 +15,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  getOffsetDateString,
+  getTodayDateString,
   normalizeTaskTags,
   validateTaskDates,
 } from '@/features/tasks/utils/taskFilters';
@@ -24,6 +26,7 @@ import type {
   TaskRecord,
   TaskStatus,
 } from '@/services';
+import { cn } from '@/utils/cn';
 
 export interface TaskEditorDialogProps {
   open: boolean;
@@ -106,6 +109,23 @@ export function TaskEditorDialog({
       setLinkedNoteIds([...prefillLinkedNoteIds]);
     }
   }, [open, task, prefillLinkedNoteIds, prefillDueDate]);
+
+  const todayStr = getTodayDateString();
+  const tomorrowStr = getOffsetDateString(1);
+  const nextWeekStr = getOffsetDateString(7);
+
+  const dueDatePresets = [
+    { label: 'Today', value: todayStr },
+    { label: 'Tomorrow', value: tomorrowStr },
+    { label: 'Next Week', value: nextWeekStr },
+    { label: 'No Date', value: '' },
+  ] as const;
+
+  const priorityOptions: ReadonlyArray<{ value: TaskPriority; label: string }> = [
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+  ];
 
   const notesById = new Map(notes.map((n) => [n.id, n]));
   const availableNotesToLink = notes.filter(
@@ -273,22 +293,39 @@ export function TaskEditorDialog({
             </div>
 
             <div className="space-y-1">
-              <label
-                htmlFor="task-priority-select"
+              <span
+                id="task-priority-label"
                 className="text-xs font-medium text-muted-foreground"
               >
                 Priority
-              </label>
-              <select
-                id="task-priority-select"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              </span>
+              <div
+                role="group"
+                aria-labelledby="task-priority-label"
+                className="grid h-8 w-full grid-cols-3 gap-0.5 rounded-md border border-border bg-background p-0.5"
               >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
+                {priorityOptions.map((option) => {
+                  const active = priority === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setPriority(option.value)}
+                      aria-pressed={active}
+                      className={cn(
+                        'rounded-[5px] px-2 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                        active
+                          ? option.value === 'high'
+                            ? 'bg-primary text-primary-foreground shadow-xs'
+                            : 'bg-accent text-foreground shadow-xs'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -309,7 +346,7 @@ export function TaskEditorDialog({
               />
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label
                 htmlFor="task-due-date"
                 className="text-xs font-medium text-muted-foreground"
@@ -323,6 +360,31 @@ export function TaskEditorDialog({
                 onChange={(e) => setDueDate(e.target.value)}
                 className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               />
+              <div
+                role="group"
+                aria-label="Due date quick presets"
+                className="flex flex-wrap gap-1"
+              >
+                {dueDatePresets.map((preset) => {
+                  const active = dueDate === preset.value;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setDueDate(preset.value)}
+                      aria-pressed={active}
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                        active
+                          ? 'border-primary bg-primary/15 text-primary'
+                          : 'border-border bg-background/70 text-muted-foreground hover:bg-accent hover:text-foreground',
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 

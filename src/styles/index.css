@@ -360,3 +360,13 @@
 .nexus-excalidraw .excalidraw .App-menu_top .buttonList {
   gap: 2px;
 }
+
+/* Hide horizontal scrollbars for compact mobile toolbars while preserving touch scroll */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

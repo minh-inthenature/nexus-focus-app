@@ -104,7 +104,7 @@ export function ExcalidrawModal({
     >
       <DialogContent
         aria-label="Edit diagram"
-        className="flex h-[84vh] w-[92vw] max-w-[1160px] flex-col gap-0 overflow-hidden border-border bg-background p-0 [.dark_&]:bg-[#141414]"
+        className="flex h-[90dvh] w-[96vw] max-w-[1160px] flex-col gap-0 overflow-hidden border-border bg-background p-0 md:h-[84vh] md:w-[92vw] [.dark_&]:bg-[#141414]"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border bg-card/80 px-4 py-2.5 pr-12">
           <div className="flex items-center gap-2">

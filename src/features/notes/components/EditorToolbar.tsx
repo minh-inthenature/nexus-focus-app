@@ -67,7 +67,7 @@ function ToolbarButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
     >
       <Icon className="h-3.5 w-3.5" aria-hidden="true" />
     </button>
@@ -95,7 +95,7 @@ export function EditorToolbar({
     <div
       role="toolbar"
       aria-label="Markdown formatting"
-      className="flex flex-wrap items-center gap-0.5 border-b border-border bg-background px-4 py-1.5"
+      className="flex flex-nowrap items-center gap-0.5 overflow-x-auto no-scrollbar border-b border-border bg-background px-2.5 py-1.5 md:flex-wrap md:overflow-visible md:px-4"
     >
       {TEXT_ACTIONS.map((item) => (
         <ToolbarButton
@@ -106,7 +106,7 @@ export function EditorToolbar({
         />
       ))}
 
-      <Separator orientation="vertical" className="mx-1.5 h-4" />
+      <Separator orientation="vertical" className="mx-1.5 h-4 shrink-0" />
 
       {LIST_ACTIONS.map((item) => (
         <ToolbarButton
@@ -117,7 +117,7 @@ export function EditorToolbar({
         />
       ))}
 
-      <Separator orientation="vertical" className="mx-1.5 h-4" />
+      <Separator orientation="vertical" className="mx-1.5 h-4 shrink-0" />
 
       {BLOCK_ACTIONS.map((item) => (
         <ToolbarButton
@@ -128,7 +128,7 @@ export function EditorToolbar({
         />
       ))}
 
-      <Separator orientation="vertical" className="mx-1.5 h-4" />
+      <Separator orientation="vertical" className="mx-1.5 h-4 shrink-0" />
 
       <input
         ref={fileInputRef}

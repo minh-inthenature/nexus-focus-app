@@ -32,7 +32,7 @@ export function AppShell() {
   useKeyboardShortcut({ key: '\\', ctrlOrMeta: true }, () => toggleSidebar());
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+    <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <Sidebar />
       <WorkspaceContainer>
         <Outlet />

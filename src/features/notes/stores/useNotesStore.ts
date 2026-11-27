@@ -48,6 +48,7 @@ interface NotesStoreState {
   editorMode: EditorMode;
   isFullscreen: boolean;
   explorerCollapsed: boolean;
+  mobileExplorerOpen: boolean;
   expandedFolderIds: string[];
   searchQuery: string;
   selectedTag: string | null;
@@ -65,6 +66,8 @@ interface NotesStoreState {
   toggleFullscreen: () => void;
   toggleExplorer: () => void;
   setExplorerCollapsed: (collapsed: boolean) => void;
+  toggleMobileExplorer: () => void;
+  setMobileExplorerOpen: (open: boolean) => void;
   toggleFolderExpanded: (folderId: string) => void;
   expandFolder: (folderId: string) => void;
   setSearchQuery: (query: string) => void;
@@ -110,6 +113,7 @@ export const useNotesStore = create<NotesStoreState>()(
       editorMode: 'edit',
       isFullscreen: false,
       explorerCollapsed: false,
+      mobileExplorerOpen: false,
       expandedFolderIds: [],
       searchQuery: '',
       selectedTag: null,
@@ -174,6 +178,7 @@ export const useNotesStore = create<NotesStoreState>()(
           backlinks,
           saveStatus: 'saved',
           saveError: null,
+          mobileExplorerOpen: false,
         });
       },
 
@@ -196,6 +201,11 @@ export const useNotesStore = create<NotesStoreState>()(
         set((state) => ({ explorerCollapsed: !state.explorerCollapsed })),
 
       setExplorerCollapsed: (collapsed) => set({ explorerCollapsed: collapsed }),
+
+      toggleMobileExplorer: () =>
+        set((state) => ({ mobileExplorerOpen: !state.mobileExplorerOpen })),
+
+      setMobileExplorerOpen: (open) => set({ mobileExplorerOpen: open }),
 
       toggleFolderExpanded: (folderId) =>
         set((state) => ({
@@ -230,6 +240,7 @@ export const useNotesStore = create<NotesStoreState>()(
           backlinks,
           saveStatus: 'saved',
           saveError: null,
+          mobileExplorerOpen: false,
         });
         return created;
       },
@@ -319,6 +330,7 @@ export const useNotesStore = create<NotesStoreState>()(
           backlinks,
           saveStatus: 'saved',
           saveError: null,
+          mobileExplorerOpen: false,
         });
         return note;
       },

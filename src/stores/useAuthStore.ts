@@ -41,6 +41,7 @@ interface AuthStoreState {
   initialize: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   completeOAuthCallback: (code?: string | null) => Promise<void>;
+  completeNativeOAuthUrl: (rawUrl: string) => Promise<void>;
   signOut: () => Promise<void>;
   enterLocalMode: () => void;
   exitLocalMode: () => void;
@@ -171,6 +172,42 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         isSigningIn: false,
         error:
           err instanceof Error ? err.message : 'Authentication callback failed.',
+        initialized: true,
+      });
+    }
+  },
+
+  completeNativeOAuthUrl: async (rawUrl) => {
+    set({ status: 'loading', error: null });
+    try {
+      const session = await supabaseAuthService.completeNativeOAuthUrl(rawUrl);
+      if (session) {
+        writeLocalModeFlag(false);
+        set({
+          status: 'authenticated',
+          session,
+          localMode: false,
+          isSigningIn: false,
+          initialized: true,
+        });
+      } else {
+        set({
+          status: 'unauthenticated',
+          session: null,
+          isSigningIn: false,
+          error: 'Google sign-in did not return an active session.',
+          initialized: true,
+        });
+      }
+    } catch (err) {
+      set({
+        status: 'unauthenticated',
+        session: null,
+        isSigningIn: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : 'Native Google sign-in callback failed.',
         initialized: true,
       });
     }

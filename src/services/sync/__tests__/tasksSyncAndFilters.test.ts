@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   filterAndSortTasks,
+  getOffsetDateString,
+  getTodayDateString,
   isTaskDueToday,
   isTaskOverdue,
   isTaskUpcoming,
@@ -156,6 +158,46 @@ describe('Task validation, tags, and filter/sort helpers', () => {
       today: TODAY,
     });
     expect(sortedByPriority.map((t) => t.id)).toEqual(['t1', 't3', 't2']);
+  });
+
+  it('computes local YYYY-MM-DD schedule presets without UTC shift and excludes completed tasks', () => {
+    const localLateNight = new Date(2026, 10, 27, 23, 45, 0);
+    expect(getTodayDateString(localLateNight)).toBe('2026-11-27');
+    expect(getOffsetDateString(1, localLateNight)).toBe('2026-11-28');
+    expect(getOffsetDateString(7, localLateNight)).toBe('2026-12-04');
+
+    const base = {
+      statusFilter: 'all' as const,
+      priorityFilter: 'all' as const,
+      tagFilter: null,
+      categoryFilter: null,
+      searchQuery: '',
+      sortBy: 'dueDate' as const,
+      today: '2026-11-27',
+    };
+
+    const tasks: TaskRecord[] = [
+      makeTask({ id: 'active-today', dueDate: '2026-11-27', priority: 'high' }),
+      makeTask({ id: 'done-today', status: 'done', dueDate: '2026-11-27', priority: 'high' }),
+      makeTask({ id: 'active-upcoming', dueDate: '2026-12-04' }),
+      makeTask({ id: 'done-upcoming', status: 'done', dueDate: '2026-12-04' }),
+      makeTask({ id: 'active-overdue', dueDate: '2026-11-26' }),
+      makeTask({ id: 'done-overdue', status: 'done', dueDate: '2026-11-26' }),
+    ];
+
+    expect(filterAndSortTasks(tasks, { ...base, preset: 'today' }).map((t) => t.id)).toEqual([
+      'active-today',
+    ]);
+    expect(filterAndSortTasks(tasks, { ...base, preset: 'upcoming' }).map((t) => t.id)).toEqual([
+      'active-today',
+      'active-upcoming',
+    ]);
+    expect(filterAndSortTasks(tasks, { ...base, preset: 'overdue' }).map((t) => t.id)).toEqual([
+      'active-overdue',
+    ]);
+    expect(
+      filterAndSortTasks(tasks, { ...base, preset: 'high_priority' }).map((t) => t.id),
+    ).toEqual(['active-today']);
   });
 });
 

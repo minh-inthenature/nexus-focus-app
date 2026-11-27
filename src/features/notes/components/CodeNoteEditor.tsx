@@ -176,10 +176,33 @@ export const CodeNoteEditor = forwardRef<
   const { resolvedTheme } = useTheme();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [model, setModel] = useState<monaco.editor.ITextModel | null>(null);
-  const [editorHeight, setEditorHeight] = useState(460);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false,
+  );
+  const [editorHeight, setEditorHeight] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 300 : 460,
+  );
   const [builtInDiagnostics, setBuiltInDiagnostics] = useState<
     CodeDiagnostic[]
   >([]);
+
+  useEffect(() => {
+    const updateViewport = () => {
+      const narrow = window.innerWidth < 768;
+      setIsMobileViewport(narrow);
+      const editor = editorRef.current;
+      if (editor) {
+        const minH = narrow ? 260 : 460;
+        const maxH = narrow
+          ? Math.max(260, Math.round(window.innerHeight * 0.65))
+          : 820;
+        const contentH = editor.getContentHeight();
+        setEditorHeight(Math.max(minH, Math.min(maxH, contentH + 28)));
+      }
+    };
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
 
   const langMeta = useMemo(() => getCodeLanguageMeta(language), [language]);
   const modelPath = `nexus://notes/${noteId}${langMeta.ext}`;
@@ -227,8 +250,13 @@ export const CodeNoteEditor = forwardRef<
     setModel(editor.getModel());
 
     const updateHeight = () => {
+      const narrow = typeof window !== 'undefined' && window.innerWidth < 768;
+      const minH = narrow ? 260 : 460;
+      const maxH = narrow
+        ? Math.max(260, Math.round(window.innerHeight * 0.65))
+        : 820;
       const contentH = editor.getContentHeight();
-      setEditorHeight(Math.max(460, Math.min(820, contentH + 28)));
+      setEditorHeight(Math.max(minH, Math.min(maxH, contentH + 28)));
     };
     updateHeight();
 
@@ -275,7 +303,7 @@ export const CodeNoteEditor = forwardRef<
   return (
     <div
       data-testid="code-note-editor"
-      className="w-full overflow-hidden"
+      className="w-full min-w-0 max-w-full overflow-hidden"
     >
       <Editor
         height={`${editorHeight}px`}
@@ -287,19 +315,23 @@ export const CodeNoteEditor = forwardRef<
         onMount={handleMount}
         onValidate={handleValidate}
         loading={
-          <div className="flex h-[460px] items-center justify-center text-xs text-muted-foreground">
+          <div className="flex h-[260px] items-center justify-center text-xs text-muted-foreground md:h-[460px]">
             Loading code editor…
           </div>
         }
         options={{
-          fontSize: 13.5,
-          lineHeight: 22,
+          fontSize: isMobileViewport ? 13 : 13.5,
+          lineHeight: isMobileViewport ? 20 : 22,
           fontFamily:
             '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
           fontLigatures: true,
+          wordWrap: isMobileViewport ? 'on' : 'off',
+          glyphMargin: !isMobileViewport,
+          folding: !isMobileViewport,
+          lineNumbersMinChars: isMobileViewport ? 3 : 5,
           minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          padding: { top: 16, bottom: 16 },
+          scrollBeyondLastLine: isMobileViewport,
+          padding: { top: 16, bottom: isMobileViewport ? 36 : 16 },
           smoothScrolling: true,
           cursorBlinking: 'smooth',
           renderLineHighlight: 'line',
@@ -311,6 +343,7 @@ export const CodeNoteEditor = forwardRef<
           scrollbar: {
             verticalScrollbarSize: 8,
             horizontalScrollbarSize: 8,
+            alwaysConsumeMouseWheel: false,
           },
         }}
       />

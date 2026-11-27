@@ -37,6 +37,8 @@ type ExplorerTab = 'files' | 'tags' | 'recent' | 'favorites';
 
 export interface NotesExplorerProps {
   onBeforeSelectNote: () => Promise<void>;
+  onCloseMobile?: () => void;
+  className?: string;
 }
 
 function HighlightMatch({ text, query }: { text: string; query: string }) {
@@ -65,7 +67,11 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
  * offline full-text search, tag explorer, recent notes, favorites, daily notes,
  * and Markdown import/export.
  */
-export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
+export function NotesExplorer({
+  onBeforeSelectNote,
+  onCloseMobile,
+  className,
+}: NotesExplorerProps) {
   const {
     notes,
     folders,
@@ -150,6 +156,7 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
   const handleSelectNote = async (noteId: string) => {
     await onBeforeSelectNote();
     await setActiveNoteId(noteId);
+    onCloseMobile?.();
   };
 
   const handleCreateNote = async (
@@ -158,14 +165,17 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
     await onBeforeSelectNote();
     if (typeof inputOrFolderId === 'string' || inputOrFolderId === null) {
       await createNote({ folderId: inputOrFolderId });
+      onCloseMobile?.();
       return;
     }
     await createNote(inputOrFolderId);
+    onCloseMobile?.();
   };
 
   const handleOpenToday = async () => {
     await onBeforeSelectNote();
     await openDailyNote();
+    onCloseMobile?.();
   };
 
   const commitRootFolder = async () => {
@@ -208,7 +218,10 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
   return (
     <aside
       aria-label="Notes explorer"
-      className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-sidebar/40 select-none"
+      className={cn(
+        'flex h-full w-64 shrink-0 flex-col border-r border-border bg-sidebar/40 select-none',
+        className,
+      )}
     >
       {/* Top Action Strip */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -268,6 +281,17 @@ export function NotesExplorer({ onBeforeSelectNote }: NotesExplorerProps) {
           >
             <Archive className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
+          {onCloseMobile ? (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              title="Close vault sidebar"
+              aria-label="Close vault sidebar"
+              className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer md:hidden"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
 
         <input

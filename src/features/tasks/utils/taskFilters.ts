@@ -43,6 +43,21 @@ export function getTodayDateString(date: Date = new Date()): string {
 }
 
 /**
+ * Formats a local date offset by `offsetDays` from `baseDate` into `YYYY-MM-DD`.
+ */
+export function getOffsetDateString(
+  offsetDays: number,
+  baseDate: Date = new Date(),
+): string {
+  const target = new Date(
+    baseDate.getFullYear(),
+    baseDate.getMonth(),
+    baseDate.getDate() + offsetDays,
+  );
+  return getTodayDateString(target);
+}
+
+/**
  * Validates optional start/due ISO date strings (`YYYY-MM-DD`).
  */
 export function validateTaskDates(

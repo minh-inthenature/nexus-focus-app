@@ -1,4 +1,11 @@
 import type { Session, User } from '@supabase/supabase-js';
+import {
+  closeExternalAuthBrowser,
+  isNativeCapacitorApp,
+  NATIVE_OAUTH_REDIRECT_URL,
+  openExternalAuthUrl,
+  parseOAuthCallbackUrl,
+} from '@/services/native/capacitor.service';
 import type {
   AuthService,
   AuthSession,
@@ -88,6 +95,29 @@ export class SupabaseAuthService implements AuthService {
       );
     }
 
+    if (isNativeCapacitorApp()) {
+      const { data, error } = await client.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: NATIVE_OAUTH_REDIRECT_URL,
+          skipBrowserRedirect: true,
+          queryParams: {
+            prompt: 'select_account',
+          },
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to start Google sign-in.');
+      }
+      if (!data?.url) {
+        throw new Error('Supabase did not return an OAuth sign-in URL.');
+      }
+
+      await openExternalAuthUrl(data.url);
+      return;
+    }
+
     const redirectTo = `${window.location.origin}/auth/callback`;
     const { error } = await client.auth.signInWithOAuth({
       provider: 'google',
@@ -102,6 +132,45 @@ export class SupabaseAuthService implements AuthService {
     if (error) {
       throw new Error(error.message || 'Failed to start Google sign-in.');
     }
+  }
+
+  public async completeNativeOAuthUrl(
+    rawUrl: string,
+  ): Promise<AuthSession | null> {
+    const parsed = parseOAuthCallbackUrl(rawUrl);
+    if (!parsed.isOAuthCallback) {
+      return null;
+    }
+
+    await closeExternalAuthBrowser();
+
+    if (parsed.error) {
+      throw new Error(parsed.error);
+    }
+
+    const client = getSupabaseClient();
+    if (!client) {
+      throw new Error('Supabase authentication is not configured.');
+    }
+
+    if (parsed.code) {
+      return this.completeAuthCallback(parsed.code);
+    }
+
+    if (parsed.accessToken && parsed.refreshToken) {
+      const { data, error } = await client.auth.setSession({
+        access_token: parsed.accessToken,
+        refresh_token: parsed.refreshToken,
+      });
+      if (error) {
+        throw new Error(
+          error.message || 'Failed to complete native Google sign-in.',
+        );
+      }
+      return mapSession(data.session);
+    }
+
+    return this.getSession();
   }
 
   public async completeAuthCallback(code?: string | null): Promise<AuthSession | null> {

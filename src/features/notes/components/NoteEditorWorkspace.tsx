@@ -107,11 +107,13 @@ export function NoteEditorWorkspace({
     editorMode,
     isFullscreen,
     explorerCollapsed,
+    mobileExplorerOpen,
     setSaveStatus,
     setEditorMode,
     toggleEditorMode,
     toggleFullscreen,
     toggleExplorer,
+    toggleMobileExplorer,
     saveNoteContent,
     renameNote,
     updateNoteLanguage,
@@ -368,7 +370,9 @@ export function NoteEditorWorkspace({
         editorMode={editorMode}
         isFullscreen={isFullscreen}
         explorerCollapsed={explorerCollapsed}
+        mobileExplorerOpen={mobileExplorerOpen}
         onToggleExplorer={toggleExplorer}
+        onToggleMobileExplorer={toggleMobileExplorer}
         onRenameNote={async (newTitle) => {
           await flushPendingSave();
           await renameNote(note.id, newTitle);
@@ -441,16 +445,16 @@ export function NoteEditorWorkspace({
       ) : (
         <div
           className={cn(
-            'flex-1 overflow-y-auto',
+            'min-w-0 max-w-full flex-1 overflow-y-auto overflow-x-hidden',
             codeMode && '[.dark_&]:bg-[#141414]',
           )}
         >
           <div
             className={cn(
-              'flex min-h-full w-full flex-col',
+              'flex min-h-full w-full min-w-0 flex-col',
               codeMode
-                ? 'px-2 py-2 md:px-4'
-                : 'max-w-4xl px-6 py-4 md:pl-12 md:pr-16',
+                ? 'px-2 py-2 pb-24 md:px-4 md:pb-4'
+                : 'max-w-4xl px-4 py-4 pb-24 md:pb-6 md:pl-12 md:pr-16',
             )}
           >
             {noteTags.length > 0 ? (
@@ -525,7 +529,7 @@ export function NoteEditorWorkspace({
 
       {/* Careful unused attachments notice */}
       {unusedAttachments.length > 0 ? (
-        <div className="flex items-center justify-between border-t border-border bg-muted/30 px-6 py-1.5 text-xs text-muted-foreground md:px-10">
+        <div className="flex items-center justify-between border-t border-border bg-muted/30 px-4 py-1.5 text-xs text-muted-foreground md:px-10">
           <span>
             {unusedAttachments.length} unreferenced local attachment(s)
           </span>
@@ -558,7 +562,7 @@ export function NoteEditorWorkspace({
       />
 
       {/* Footer Metrics */}
-      <footer className="flex items-center justify-between border-t border-border bg-background px-6 py-1.5 text-[11px] text-muted-foreground md:px-10">
+      <footer className="flex items-center justify-between border-t border-border bg-background px-4 py-1.5 text-[11px] text-muted-foreground md:px-10">
         <div className="flex items-center gap-4">
           {canvasMode ? (
             <>
