@@ -95,7 +95,7 @@ export function EditorToolbar({
     <div
       role="toolbar"
       aria-label="Markdown formatting"
-      className="flex flex-nowrap items-center gap-0.5 overflow-x-auto no-scrollbar border-b border-border bg-background px-2.5 py-1.5 md:flex-wrap md:overflow-visible md:px-4"
+      className="flex flex-nowrap items-center gap-0.5 overflow-x-auto no-scrollbar border-b border-border bg-background px-2.5 py-1.5 md:flex-wrap md:overflow-visible md:px-4 [.forest_&]:border-[#1E2623] [.forest_&]:bg-[#0D1210]"
     >
       {TEXT_ACTIONS.map((item) => (
         <ToolbarButton

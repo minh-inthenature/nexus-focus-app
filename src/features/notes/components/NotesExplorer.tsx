@@ -220,7 +220,7 @@ export function NotesExplorer({
     <aside
       aria-label="Notes explorer"
       className={cn(
-        'flex h-full w-64 shrink-0 flex-col border-r border-border bg-sidebar/40 select-none',
+        'flex h-full w-64 shrink-0 flex-col border-r border-border bg-sidebar/40 select-none [.forest_&]:border-[#1E2623] [.forest_&]:bg-[#0D1210]',
         className,
       )}
     >
@@ -451,8 +451,8 @@ export function NotesExplorer({
                     className={cn(
                       'w-full rounded-md border border-transparent px-2.5 py-2 text-left transition-colors cursor-pointer',
                       result.note.id === activeNoteId
-                        ? 'border-border bg-accent text-accent-foreground'
-                        : 'hover:bg-accent/60',
+                        ? 'border-border bg-accent text-accent-foreground [.forest_&]:border-transparent [.forest_&]:bg-[#18221E] [.forest_&]:text-[#8AB8A3] [.forest_&]:shadow-[inset_2px_0_0_#8AB8A3]'
+                        : 'hover:bg-accent/60 [.forest_&]:hover:bg-white/[0.05]',
                     )}
                   >
                     <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
@@ -591,8 +591,8 @@ export function NotesExplorer({
                     className={cn(
                       'flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer',
                       note.id === activeNoteId
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-sidebar-foreground/85 hover:bg-accent/60',
+                        ? 'bg-accent text-accent-foreground [.forest_&]:bg-[#18221E] [.forest_&]:text-[#8AB8A3] [.forest_&]:shadow-[inset_2px_0_0_#8AB8A3]'
+                        : 'text-sidebar-foreground/85 hover:bg-accent/60 [.forest_&]:hover:bg-white/[0.05]',
                     )}
                   >
                     <span className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -651,8 +651,8 @@ export function NotesExplorer({
                     className={cn(
                       'flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer',
                       note.id === activeNoteId
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-sidebar-foreground/85 hover:bg-accent/60',
+                        ? 'bg-accent text-accent-foreground [.forest_&]:bg-[#18221E] [.forest_&]:text-[#8AB8A3] [.forest_&]:shadow-[inset_2px_0_0_#8AB8A3]'
+                        : 'text-sidebar-foreground/85 hover:bg-accent/60 [.forest_&]:hover:bg-white/[0.05]',
                     )}
                   >
                     <Star

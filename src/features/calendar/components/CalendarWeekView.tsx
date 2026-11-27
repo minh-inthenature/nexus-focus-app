@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, CheckSquare, Repeat } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -10,11 +10,17 @@ import {
   getWeekDates,
   layoutOverlappingTimedEvents,
   parseDateKeyToLocal,
+  resolveEventColor,
   WEEKDAY_LABELS,
 } from '@/features/calendar/utils/calendarDateUtils';
 import { isTaskOverdue } from '@/features/tasks/utils/taskFilters';
-import type { CalendarEventRecord, TaskRecord } from '@/services';
+import type { CalendarEventRecord, EventColor, TaskRecord } from '@/services';
 import { cn } from '@/utils/cn';
+import { CurrentTimeLine, useCurrentLocalTime } from './CurrentTimeLine';
+import {
+  EventColorContextMenu,
+  type EventColorContextMenuState,
+} from './EventColorSwatches';
 
 export interface CalendarWeekViewProps {
   selectedDate: string;
@@ -25,6 +31,7 @@ export interface CalendarWeekViewProps {
   onSelectDate: (dateKey: string) => void;
   onCreateEventAtSlot: (dateKey: string, startTimeHHMM: string) => void;
   onEditEvent: (eventId: string) => void;
+  onChangeEventColor?: (eventId: string, color: EventColor) => Promise<void>;
   onToggleTaskCompleted: (taskId: string) => Promise<void>;
 }
 
@@ -46,16 +53,24 @@ export function CalendarWeekView({
   onSelectDate,
   onCreateEventAtSlot,
   onEditEvent,
+  onChangeEventColor,
   onToggleTaskCompleted,
 }: CalendarWeekViewProps) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [colorMenu, setColorMenu] = useState<EventColorContextMenuState | null>(
+    null,
+  );
   const weekDates = getWeekDates(selectedDate);
-  const todayKey = getTodayDateKey();
+  const nowTime = useCurrentLocalTime();
+  const todayKey = nowTime.dateKey || getTodayDateKey();
 
   useEffect(() => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 8 * HOUR_HEIGHT_PX;
+      const targetHour = Math.max(0, Math.min(TOTAL_HOURS - 10, nowTime.hour - 3));
+      scrollContainerRef.current.scrollTop = targetHour * HOUR_HEIGHT_PX;
     }
+    // Intentionally only center once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -126,6 +141,18 @@ export function CalendarWeekView({
                     key={`${ev.id}-${ev.startAt}`}
                     type="button"
                     onClick={() => onEditEvent(ev.id)}
+                    onContextMenu={(e) => {
+                      if (!onChangeEventColor) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setColorMenu({
+                        eventId: ev.id,
+                        title: ev.title,
+                        currentColor: resolveEventColor(ev.category, ev.color),
+                        x: e.clientX,
+                        y: e.clientY,
+                      });
+                    }}
                     title={`${ev.title} (${CATEGORY_LABELS[ev.category]})`}
                     className={cn(
                       'flex w-full items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[11px] leading-tight cursor-pointer',
@@ -264,6 +291,21 @@ export function CalendarWeekView({
                         onSelectDate(dateKey);
                         onEditEvent(event.id);
                       }}
+                      onContextMenu={(e) => {
+                        if (!onChangeEventColor) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setColorMenu({
+                          eventId: event.id,
+                          title: event.title,
+                          currentColor: resolveEventColor(
+                            event.category,
+                            event.color,
+                          ),
+                          x: e.clientX,
+                          y: e.clientY,
+                        });
+                      }}
                       style={{
                         top: `${metrics.topPercent}%`,
                         height: `${metrics.heightPercent}%`,
@@ -285,11 +327,23 @@ export function CalendarWeekView({
                     </button>
                   );
                 })}
+
+                {dateKey === todayKey ? (
+                  <CurrentTimeLine topPercent={nowTime.topPercent} />
+                ) : null}
               </div>
             );
           })}
         </div>
       </div>
+
+      <EventColorContextMenu
+        menu={colorMenu}
+        onSelectColor={(eventId, nextColor) => {
+          void onChangeEventColor?.(eventId, nextColor);
+        }}
+        onClose={() => setColorMenu(null)}
+      />
     </div>
   );
 }

@@ -113,6 +113,8 @@ export function mapRemoteTaskToLocal(
     ...(remote.dueDate ? { dueDate: remote.dueDate } : {}),
     tags: [...remote.tags],
     ...(remote.category ? { category: remote.category } : {}),
+    ...(remote.groupName ? { group: remote.groupName } : {}),
+    ...(remote.isBacklog !== undefined ? { isBacklog: remote.isBacklog } : {}),
     linkedNoteIds: [...remote.linkedNoteIds],
     createdAt: remote.createdAt,
     updatedAt: remote.updatedAt,
@@ -121,6 +123,69 @@ export function mapRemoteTaskToLocal(
     lastSyncedRevision: remote.revision,
     lastSyncedUpdatedAt: remote.updatedAt,
   };
+}
+
+/**
+ * Upserts a task row into Supabase `tasks`, gracefully falling back if the
+ * `group_name` / `is_backlog` migration hasn't been executed yet.
+ */
+export async function upsertTaskRowToSupabase(
+  client: NonNullable<ReturnType<typeof getSupabaseClient>>,
+  task: TaskRecord,
+  userId: string,
+  revisionOverride?: number,
+): Promise<{ updated_at?: string; revision?: number } | null> {
+  const basePayload = {
+    id: task.id,
+    user_id: userId,
+    title: task.title,
+    description: task.description ?? null,
+    status: task.status,
+    priority: task.priority,
+    start_date: task.startDate ?? null,
+    due_date: task.dueDate ?? null,
+    tags: [...task.tags],
+    category: task.category ?? null,
+    linked_note_ids: [...task.linkedNoteIds],
+    revision: revisionOverride ?? task.revision,
+    created_at: task.createdAt,
+    updated_at: task.updatedAt,
+    completed_at: task.completedAt ?? null,
+    deleted_at: null,
+  };
+
+  const fullPayload = {
+    ...basePayload,
+    group_name: task.group ?? null,
+    is_backlog: Boolean(task.isBacklog),
+  };
+
+  const { data, error } = await client
+    .from('tasks')
+    .upsert(fullPayload, { onConflict: 'id' })
+    .select('updated_at, revision')
+    .single();
+
+  if (error) {
+    const missingOptionalColumn =
+      error.code === '42703' ||
+      error.code === 'PGRST204' ||
+      /group_name|is_backlog/i.test(error.message);
+    if (missingOptionalColumn) {
+      const retry = await client
+        .from('tasks')
+        .upsert(basePayload, { onConflict: 'id' })
+        .select('updated_at, revision')
+        .single();
+      if (retry.error) {
+        throw new Error(retry.error.message);
+      }
+      return retry.data;
+    }
+    throw new Error(error.message);
+  }
+
+  return data;
 }
 
 async function pushTaskToSupabase(
@@ -134,35 +199,7 @@ async function pushTaskToSupabase(
   }
 
   const nextRevision = overrideRevision ?? task.revision;
-  const { data, error } = await client
-    .from('tasks')
-    .upsert(
-      {
-        id: task.id,
-        user_id: userId,
-        title: task.title,
-        description: task.description ?? null,
-        status: task.status,
-        priority: task.priority,
-        start_date: task.startDate ?? null,
-        due_date: task.dueDate ?? null,
-        tags: [...task.tags],
-        category: task.category ?? null,
-        linked_note_ids: [...task.linkedNoteIds],
-        revision: nextRevision,
-        created_at: task.createdAt,
-        updated_at: task.updatedAt,
-        completed_at: task.completedAt ?? null,
-        deleted_at: null,
-      },
-      { onConflict: 'id' },
-    )
-    .select('updated_at, revision')
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  const data = await upsertTaskRowToSupabase(client, task, userId, nextRevision);
 
   const syncedUpdatedAt =
     typeof data?.updated_at === 'string' ? data.updated_at : task.updatedAt;
@@ -226,6 +263,8 @@ async function resolveTaskConflict(
       ...(snap.dueDate ? { dueDate: snap.dueDate } : {}),
       tags: snap.tags,
       ...(snap.category ? { category: snap.category } : {}),
+      ...(snap.groupName ? { group: snap.groupName } : {}),
+      ...(snap.isBacklog !== undefined ? { isBacklog: snap.isBacklog } : {}),
       linkedNoteIds: snap.linkedNoteIds,
     });
   }

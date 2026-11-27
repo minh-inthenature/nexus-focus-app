@@ -7,6 +7,7 @@ export {
   type CodeLanguage,
   type DriveNoteMappingRecord,
   type EventCategory,
+  type EventColor,
   type FolderRecord,
   type NoteLinkRecord,
   type NoteRecord,

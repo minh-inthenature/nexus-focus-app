@@ -23,8 +23,11 @@ import { useTasksStore } from './stores/useTasksStore';
 import type { TaskFilterPreset } from './utils/taskFilters';
 import {
   extractAllTaskCategories,
+  extractAllTaskGroups,
   extractAllTaskTags,
   filterAndSortTasks,
+  getTodayDateString,
+  isTaskInBacklog,
 } from './utils/taskFilters';
 
 const VALID_TASK_PRESETS: readonly TaskFilterPreset[] = [
@@ -35,6 +38,7 @@ const VALID_TASK_PRESETS: readonly TaskFilterPreset[] = [
   'high_priority',
   'completed',
   'all',
+  'backlog',
 ];
 
 /**
@@ -50,6 +54,7 @@ export function TasksPage() {
     saveStatus,
     error,
     viewMode,
+    groupBy,
     preset,
     statusFilter,
     priorityFilter,
@@ -60,8 +65,11 @@ export function TasksPage() {
     editorOpen,
     editingTaskId,
     prefillLinkedNoteIds,
+    prefillGroup,
+    prefillBacklog,
     initialize,
     setViewMode,
+    toggleGroupBy,
     setPreset,
     setStatusFilter,
     setPriorityFilter,
@@ -135,6 +143,7 @@ export function TasksPage() {
     () => extractAllTaskCategories(tasks),
     [tasks],
   );
+  const allGroups = useMemo(() => extractAllTaskGroups(tasks), [tasks]);
 
   const visibleTasks = useMemo(
     () =>
@@ -160,7 +169,8 @@ export function TasksPage() {
   );
 
   const activeCount = useMemo(
-    () => tasks.filter((t) => t.status !== 'done').length,
+    () =>
+      tasks.filter((t) => t.status !== 'done' && !isTaskInBacklog(t)).length,
     [tasks],
   );
 
@@ -211,7 +221,9 @@ export function TasksPage() {
             <Button
               type="button"
               size="sm"
-              onClick={() => openCreateModal()}
+              onClick={() =>
+                openCreateModal([], { isBacklog: preset === 'backlog' })
+              }
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               <span>New Task</span>
@@ -234,6 +246,8 @@ export function TasksPage() {
       ) : null}
 
       <TaskQuickAdd
+        existingGroups={allGroups}
+        defaultBacklog={preset === 'backlog'}
         onCreate={async (input) => {
           await createTask(input);
         }}
@@ -242,6 +256,7 @@ export function TasksPage() {
       <TaskFiltersBar
         tasks={tasks}
         viewMode={viewMode}
+        groupBy={groupBy}
         preset={preset}
         statusFilter={statusFilter}
         priorityFilter={priorityFilter}
@@ -252,6 +267,7 @@ export function TasksPage() {
         allTags={allTags}
         allCategories={allCategories}
         onChangeViewMode={setViewMode}
+        onToggleGroupBy={toggleGroupBy}
         onChangePreset={setPreset}
         onChangeStatusFilter={setStatusFilter}
         onChangePriorityFilter={setPriorityFilter}
@@ -302,6 +318,7 @@ export function TasksPage() {
         <TaskListView
           tasks={visibleTasks}
           notesById={notesById}
+          groupBy={groupBy}
           onToggleComplete={async (id) => {
             await toggleCompleted(id);
           }}
@@ -309,11 +326,27 @@ export function TasksPage() {
             await updateTask(id, { status });
           }}
           onEditTask={openEditModal}
+          onMoveToActive={async (id) => {
+            await updateTask(id, { isBacklog: false });
+          }}
+          onScheduleToday={async (id) => {
+            await updateTask(id, {
+              dueDate: getTodayDateString(),
+              isBacklog: false,
+            });
+          }}
+          onAddTaskToGroup={(groupName) =>
+            openCreateModal([], {
+              group: groupName,
+              isBacklog: preset === 'backlog',
+            })
+          }
         />
       ) : viewMode === 'board' ? (
         <TaskBoardView
           tasks={visibleTasks}
           notesById={notesById}
+          groupBy={groupBy}
           onToggleComplete={async (id) => {
             await toggleCompleted(id);
           }}
@@ -321,6 +354,21 @@ export function TasksPage() {
             await updateTask(id, { status });
           }}
           onEditTask={openEditModal}
+          onMoveToActive={async (id) => {
+            await updateTask(id, { isBacklog: false });
+          }}
+          onScheduleToday={async (id) => {
+            await updateTask(id, {
+              dueDate: getTodayDateString(),
+              isBacklog: false,
+            });
+          }}
+          onAddTaskToGroup={(groupName) =>
+            openCreateModal([], {
+              group: groupName,
+              isBacklog: preset === 'backlog',
+            })
+          }
         />
       ) : (
         <TaskScheduleView
@@ -337,8 +385,11 @@ export function TasksPage() {
         open={editorOpen}
         task={editingTask}
         prefillLinkedNoteIds={prefillLinkedNoteIds}
+        prefillGroup={prefillGroup}
+        prefillBacklog={prefillBacklog}
         notes={notes}
         existingCategories={allCategories}
+        existingGroups={allGroups}
         onSave={async (payload) => {
           if (editingTask) {
             await updateTask(editingTask.id, {
@@ -349,6 +400,8 @@ export function TasksPage() {
               startDate: payload.startDate || null,
               dueDate: payload.dueDate || null,
               category: payload.category || null,
+              group: payload.group || null,
+              isBacklog: payload.isBacklog,
               tags: payload.tags,
               linkedNoteIds: payload.linkedNoteIds,
             });
@@ -361,6 +414,8 @@ export function TasksPage() {
               ...(payload.startDate ? { startDate: payload.startDate } : {}),
               ...(payload.dueDate ? { dueDate: payload.dueDate } : {}),
               ...(payload.category ? { category: payload.category } : {}),
+              ...(payload.group ? { group: payload.group } : {}),
+              isBacklog: payload.isBacklog,
               tags: payload.tags,
               linkedNoteIds: payload.linkedNoteIds,
             });

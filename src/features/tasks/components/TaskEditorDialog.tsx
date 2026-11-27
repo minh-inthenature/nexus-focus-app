@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   ExternalLink,
   FileText,
+  FolderKanban,
+  Inbox,
   Plus,
   Trash2,
   X,
@@ -33,8 +35,11 @@ export interface TaskEditorDialogProps {
   task: TaskRecord | null;
   prefillLinkedNoteIds: readonly string[];
   prefillDueDate?: string;
+  prefillGroup?: string | null;
+  prefillBacklog?: boolean;
   notes: readonly NoteRecord[];
   existingCategories: readonly string[];
+  existingGroups?: readonly string[];
   onSave: (payload: {
     title: string;
     description: string;
@@ -43,6 +48,8 @@ export interface TaskEditorDialogProps {
     startDate: string;
     dueDate: string;
     category: string;
+    group: string;
+    isBacklog: boolean;
     tags: string[];
     linkedNoteIds: string[];
   }) => Promise<void>;
@@ -59,8 +66,11 @@ export function TaskEditorDialog({
   task,
   prefillLinkedNoteIds,
   prefillDueDate = '',
+  prefillGroup = null,
+  prefillBacklog = false,
   notes,
   existingCategories,
+  existingGroups = [],
   onSave,
   onDelete,
   onClose,
@@ -72,6 +82,8 @@ export function TaskEditorDialog({
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [category, setCategory] = useState('');
+  const [group, setGroup] = useState('');
+  const [isBacklog, setIsBacklog] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState('');
   const [linkedNoteIds, setLinkedNoteIds] = useState<string[]>([]);
@@ -95,6 +107,11 @@ export function TaskEditorDialog({
       setStartDate(task.startDate ?? '');
       setDueDate(task.dueDate ?? '');
       setCategory(task.category ?? '');
+      setGroup(task.group ?? '');
+      setIsBacklog(
+        task.status !== 'done' &&
+          (Boolean(task.isBacklog) || (!task.dueDate && task.isBacklog !== false)),
+      );
       setTags([...task.tags]);
       setLinkedNoteIds([...task.linkedNoteIds]);
     } else {
@@ -105,10 +122,12 @@ export function TaskEditorDialog({
       setStartDate('');
       setDueDate(prefillDueDate);
       setCategory('');
+      setGroup(prefillGroup ?? '');
+      setIsBacklog(prefillBacklog || !prefillDueDate);
       setTags([]);
       setLinkedNoteIds([...prefillLinkedNoteIds]);
     }
-  }, [open, task, prefillLinkedNoteIds, prefillDueDate]);
+  }, [open, task, prefillLinkedNoteIds, prefillDueDate, prefillGroup, prefillBacklog]);
 
   const todayStr = getTodayDateString();
   const tomorrowStr = getOffsetDateString(1);
@@ -163,7 +182,7 @@ export function TaskEditorDialog({
 
     const dateErr = validateTaskDates(
       startDate || undefined,
-      dueDate || undefined,
+      isBacklog ? undefined : dueDate || undefined,
     );
     if (dateErr) {
       setValidationError(dateErr);
@@ -183,8 +202,10 @@ export function TaskEditorDialog({
         status,
         priority,
         startDate,
-        dueDate,
+        dueDate: isBacklog ? '' : dueDate,
         category,
+        group,
+        isBacklog,
         tags: finalTags,
         linkedNoteIds,
       });
@@ -357,7 +378,13 @@ export function TaskEditorDialog({
                 id="task-due-date"
                 type="date"
                 value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDueDate(val);
+                  if (val) {
+                    setIsBacklog(false);
+                  }
+                }}
                 className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               />
               <div
@@ -366,12 +393,15 @@ export function TaskEditorDialog({
                 className="flex flex-wrap gap-1"
               >
                 {dueDatePresets.map((preset) => {
-                  const active = dueDate === preset.value;
+                  const active = !isBacklog && dueDate === preset.value;
                   return (
                     <button
                       key={preset.label}
                       type="button"
-                      onClick={() => setDueDate(preset.value)}
+                      onClick={() => {
+                        setDueDate(preset.value);
+                        setIsBacklog(preset.value === '');
+                      }}
                       aria-pressed={active}
                       className={cn(
                         'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
@@ -384,8 +414,86 @@ export function TaskEditorDialog({
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !isBacklog;
+                    setIsBacklog(next);
+                    if (next) {
+                      setDueDate('');
+                    }
+                  }}
+                  aria-pressed={isBacklog}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    isBacklog
+                      ? 'border-primary bg-primary/15 text-primary'
+                      : 'border-border bg-background/70 text-muted-foreground hover:bg-accent hover:text-foreground',
+                  )}
+                >
+                  <Inbox className="h-2.5 w-2.5" aria-hidden="true" />
+                  <span>Backlog</span>
+                </button>
               </div>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="task-group-input"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+              >
+                <FolderKanban className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Task group</span>
+              </label>
+              {group ? (
+                <button
+                  type="button"
+                  onClick={() => setGroup('')}
+                  className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  Ungroup
+                </button>
+              ) : null}
+            </div>
+            <input
+              id="task-group-input"
+              type="text"
+              list="nexus-task-groups"
+              value={group}
+              onChange={(e) => setGroup(e.target.value)}
+              placeholder="Pick an existing group or type a new one (e.g. Ôn thi Vật lý 2)"
+              className="h-8 w-full rounded-md border border-border bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <datalist id="nexus-task-groups">
+              {existingGroups.map((g) => (
+                <option key={g} value={g} />
+              ))}
+            </datalist>
+            {existingGroups.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {existingGroups.map((g) => {
+                  const selected = group.trim() === g;
+                  return (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setGroup(selected ? '' : g)}
+                      aria-pressed={selected}
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-[11px] transition-colors cursor-pointer',
+                        selected
+                          ? 'border-primary bg-primary/15 text-primary font-medium'
+                          : 'border-border bg-background/70 text-muted-foreground hover:bg-accent hover:text-foreground',
+                      )}
+                    >
+                      {g}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

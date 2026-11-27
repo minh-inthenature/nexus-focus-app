@@ -463,6 +463,9 @@ export function CalendarPage() {
           onCreateEventOnDate={(dateKey) => openSlotModal(dateKey)}
           onCreateTaskOnDate={openCreateTaskForDate}
           onEditEvent={openEditModal}
+          onChangeEventColor={async (eventId, nextColor) => {
+            await updateEvent(eventId, { color: nextColor });
+          }}
           onToggleTaskCompleted={async (id) => {
             await toggleTaskCompleted(id);
           }}
@@ -479,6 +482,9 @@ export function CalendarPage() {
             openSlotModal(dateKey, startTime)
           }
           onEditEvent={openEditModal}
+          onChangeEventColor={async (eventId, nextColor) => {
+            await updateEvent(eventId, { color: nextColor });
+          }}
           onToggleTaskCompleted={async (id) => {
             await toggleTaskCompleted(id);
           }}
@@ -496,6 +502,9 @@ export function CalendarPage() {
           }
           onCreateTaskOnDate={openCreateTaskForDate}
           onEditEvent={openEditModal}
+          onChangeEventColor={async (eventId, nextColor) => {
+            await updateEvent(eventId, { color: nextColor });
+          }}
           onToggleTaskCompleted={async (id) => {
             await toggleTaskCompleted(id);
           }}
@@ -557,9 +566,7 @@ export function CalendarPage() {
               allDay: payload.allDay,
               timezone: payload.timezone,
               category: payload.category,
-              ...(payload.color && payload.color !== 'default'
-                ? { color: payload.color }
-                : {}),
+              color: payload.color,
               linkedNoteIds: payload.linkedNoteIds,
               linkedTaskIds: payload.linkedTaskIds,
               ...(payload.rrule ? { rrule: payload.rrule } : {}),
@@ -587,6 +594,8 @@ export function CalendarPage() {
             ...(payload.startDate ? { startDate: payload.startDate } : {}),
             ...(payload.dueDate ? { dueDate: payload.dueDate } : {}),
             ...(payload.category ? { category: payload.category } : {}),
+            ...(payload.group ? { group: payload.group } : {}),
+            isBacklog: payload.isBacklog,
             tags: payload.tags,
             linkedNoteIds: payload.linkedNoteIds,
           });

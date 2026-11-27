@@ -43,6 +43,7 @@ import {
   mapRemoteCalendarEventToLocal,
   mapRemoteTaskToLocal,
   recordSyncConflict,
+  upsertTaskRowToSupabase,
 } from './conflictResolver';
 import { buildSyncPlan } from './syncPlanner';
 import {
@@ -224,6 +225,8 @@ export async function executeSyncCycle(
     dueDate: typeof r.due_date === 'string' ? r.due_date : null,
     tags: Array.isArray(r.tags) ? r.tags.map(String) : [],
     category: typeof r.category === 'string' ? r.category : null,
+    groupName: typeof r.group_name === 'string' ? r.group_name : null,
+    isBacklog: typeof r.is_backlog === 'boolean' ? r.is_backlog : false,
     linkedNoteIds: Array.isArray(r.linked_note_ids)
       ? r.linked_note_ids.map(String)
       : [],
@@ -659,35 +662,11 @@ export async function executeSyncCycle(
             break;
           }
 
-          const { data: upsertedRow, error: taskUpsertErr } = await client
-            .from('tasks')
-            .upsert(
-              {
-                id: task.id,
-                user_id: userId,
-                title: task.title,
-                description: task.description ?? null,
-                status: task.status,
-                priority: task.priority,
-                start_date: task.startDate ?? null,
-                due_date: task.dueDate ?? null,
-                tags: [...task.tags],
-                category: task.category ?? null,
-                linked_note_ids: [...task.linkedNoteIds],
-                revision: task.revision,
-                created_at: task.createdAt,
-                updated_at: task.updatedAt,
-                completed_at: task.completedAt ?? null,
-                deleted_at: null,
-              },
-              { onConflict: 'id' },
-            )
-            .select('updated_at, revision')
-            .single();
-
-          if (taskUpsertErr) {
-            throw new Error(taskUpsertErr.message);
-          }
+          const upsertedRow = await upsertTaskRowToSupabase(
+            client,
+            task,
+            userId,
+          );
 
           await applyRemoteTaskUpsert({
             ...task,

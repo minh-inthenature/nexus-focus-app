@@ -120,7 +120,9 @@ export async function createCalendarEvent(
   const description = input.description?.trim() || undefined;
   const location = input.location?.trim() || undefined;
   const color =
-    input.color && input.color !== 'default' ? input.color.trim() : undefined;
+    input.color && input.color !== 'default'
+      ? input.color.trim() || 'blue'
+      : 'blue';
   const timezone = input.timezone?.trim() || getLocalTimezone();
   const rrule = input.rrule?.trim() || undefined;
   const exdates =
@@ -212,9 +214,9 @@ export async function updateCalendarEvent(
 
       const nextColor =
         patch.color === null || patch.color === 'default'
-          ? undefined
+          ? 'blue'
           : patch.color !== undefined
-            ? patch.color.trim() || undefined
+            ? patch.color.trim() || 'blue'
             : existing.color;
 
       const nextTimezone =

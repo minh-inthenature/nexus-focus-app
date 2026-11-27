@@ -1,14 +1,19 @@
 import {
   CalendarDays,
+  FolderKanban,
   Kanban,
   List,
   Search,
   X,
 } from 'lucide-react';
-import type { TaskViewMode } from '@/features/tasks/stores/useTasksStore';
+import type {
+  TaskGroupByMode,
+  TaskViewMode,
+} from '@/features/tasks/stores/useTasksStore';
 import {
   getTodayDateString,
   isTaskDueToday,
+  isTaskInBacklog,
   isTaskOverdue,
   isTaskUpcoming,
   type TaskFilterPreset,
@@ -20,6 +25,7 @@ import { cn } from '@/utils/cn';
 export interface TaskFiltersBarProps {
   tasks: readonly TaskRecord[];
   viewMode: TaskViewMode;
+  groupBy: TaskGroupByMode;
   preset: TaskFilterPreset;
   statusFilter: TaskStatus | 'all';
   priorityFilter: TaskPriority | 'all';
@@ -30,6 +36,7 @@ export interface TaskFiltersBarProps {
   allTags: readonly string[];
   allCategories: readonly string[];
   onChangeViewMode: (mode: TaskViewMode) => void;
+  onToggleGroupBy: () => void;
   onChangePreset: (preset: TaskFilterPreset) => void;
   onChangeStatusFilter: (status: TaskStatus | 'all') => void;
   onChangePriorityFilter: (priority: TaskPriority | 'all') => void;
@@ -47,6 +54,7 @@ export interface TaskFiltersBarProps {
 export function TaskFiltersBar({
   tasks,
   viewMode,
+  groupBy,
   preset,
   statusFilter,
   priorityFilter,
@@ -57,6 +65,7 @@ export function TaskFiltersBar({
   allTags,
   allCategories,
   onChangeViewMode,
+  onToggleGroupBy,
   onChangePreset,
   onChangeStatusFilter,
   onChangePriorityFilter,
@@ -69,9 +78,12 @@ export function TaskFiltersBar({
   const today = getTodayDateString();
 
   const counts: Record<TaskFilterPreset, number> = {
-    active: tasks.filter((t) => t.status !== 'done').length,
-    today: tasks.filter((t) => t.status !== 'done' && isTaskDueToday(t, today))
+    active: tasks.filter((t) => t.status !== 'done' && !isTaskInBacklog(t))
       .length,
+    today: tasks.filter(
+      (t) =>
+        t.status !== 'done' && !isTaskInBacklog(t) && isTaskDueToday(t, today),
+    ).length,
     upcoming: tasks.filter((t) => isTaskUpcoming(t, today)).length,
     overdue: tasks.filter((t) => isTaskOverdue(t, today)).length,
     high_priority: tasks.filter(
@@ -79,6 +91,7 @@ export function TaskFiltersBar({
     ).length,
     completed: tasks.filter((t) => t.status === 'done').length,
     all: tasks.length,
+    backlog: tasks.filter((t) => isTaskInBacklog(t)).length,
   };
 
   const presets: Array<{ id: TaskFilterPreset; label: string }> = [
@@ -89,6 +102,7 @@ export function TaskFiltersBar({
     { id: 'high_priority', label: 'High priority' },
     { id: 'completed', label: 'Completed' },
     { id: 'all', label: 'All' },
+    { id: 'backlog', label: 'Backlog' },
   ];
 
   const hasCustomFilters =
@@ -275,6 +289,23 @@ export function TaskFiltersBar({
           <option value="updatedAt">Sort: Updated</option>
           <option value="createdAt">Sort: Created</option>
         </select>
+
+        {viewMode !== 'schedule' ? (
+          <button
+            type="button"
+            onClick={onToggleGroupBy}
+            aria-pressed={groupBy === 'group'}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors cursor-pointer',
+              groupBy === 'group'
+                ? 'border-border bg-accent text-accent-foreground'
+                : 'border-border bg-card text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <FolderKanban className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Group by: {groupBy === 'group' ? 'Group' : 'None'}</span>
+          </button>
+        ) : null}
 
         {hasCustomFilters ? (
           <button

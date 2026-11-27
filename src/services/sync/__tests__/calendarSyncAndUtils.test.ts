@@ -3,12 +3,16 @@ import {
   addMonths,
   buildAllDayRange,
   buildTimedRange,
+  EVENT_COLOR_OPTIONS,
   eventOccursOnDate,
   filterCalendarEvents,
+  getEventAccentClasses,
   getEventDateRange,
+  getLocalTimePosition,
   getMonthGridDates,
   getWeekDates,
   layoutOverlappingTimedEvents,
+  resolveEventColor,
   validateEventRange,
 } from '@/features/calendar/utils/calendarDateUtils';
 import type { CalendarEventRecord } from '@/services/storage/db';
@@ -191,6 +195,34 @@ describe('Calendar date/timezone, layout, and filter utilities', () => {
         endDateFilter: '2026-11-30',
       }).map((e) => e.id),
     ).toEqual(['ev-b']);
+  });
+
+  it('resolves dark-mode event color palette options and calculates local time grid positions', () => {
+    expect(EVENT_COLOR_OPTIONS.map((o) => o.id)).toEqual([
+      'blue',
+      'sage',
+      'amber',
+      'rose',
+      'violet',
+      'slate',
+    ]);
+
+    expect(resolveEventColor('personal', 'sage')).toBe('sage');
+    expect(resolveEventColor('personal', 'emerald')).toBe('sage');
+    expect(resolveEventColor('personal', 'slate')).toBe('slate');
+    expect(resolveEventColor('study', undefined)).toBe('sage');
+    expect(getEventAccentClasses('personal', 'amber').surfaceClass).toContain(
+      'bg-amber-500/15',
+    );
+    expect(getEventAccentClasses('personal', 'slate').surfaceClass).toContain(
+      'bg-slate-500/15',
+    );
+
+    const morningPos = getLocalTimePosition(new Date(2026, 10, 27, 10, 30, 0));
+    expect(morningPos.dateKey).toBe('2026-11-27');
+    expect(morningPos.hour).toBe(10);
+    expect(morningPos.minutesFromMidnight).toBe(630);
+    expect(morningPos.topPercent).toBeCloseTo(43.75, 5);
   });
 });
 

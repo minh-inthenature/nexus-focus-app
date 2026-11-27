@@ -3,10 +3,13 @@ import {
   filterAndSortTasks,
   getOffsetDateString,
   getTodayDateString,
+  groupTasksByGroup,
   isTaskDueToday,
+  isTaskInBacklog,
   isTaskOverdue,
   isTaskUpcoming,
   normalizeTaskTags,
+  parseQuickAddTaskInput,
   validateTaskDates,
 } from '@/features/tasks/utils/taskFilters';
 import type { TaskRecord } from '@/services/storage/db';
@@ -198,6 +201,94 @@ describe('Task validation, tags, and filter/sort helpers', () => {
     expect(
       filterAndSortTasks(tasks, { ...base, preset: 'high_priority' }).map((t) => t.id),
     ).toEqual(['active-today']);
+  });
+
+  it('separates Backlog tasks from Active/Today/Upcoming/Overdue and bundles Task Groups cleanly', () => {
+    const base = {
+      statusFilter: 'all' as const,
+      priorityFilter: 'all' as const,
+      tagFilter: null,
+      categoryFilter: null,
+      searchQuery: '',
+      sortBy: 'dueDate' as const,
+      today: '2026-11-27',
+    };
+
+    const tasks: TaskRecord[] = [
+      makeTask({
+        id: 'backlog-unscheduled',
+        title: 'Read Physics Chapter 4',
+        group: 'Ôn thi Vật lý 2',
+      }),
+      makeTask({
+        id: 'backlog-explicit',
+        title: 'Someday summary',
+        dueDate: '2026-11-27',
+        isBacklog: true,
+        group: 'Ôn thi Vật lý 2',
+      }),
+      makeTask({
+        id: 'active-no-date',
+        title: 'Promoted active task',
+        isBacklog: false,
+      }),
+      makeTask({
+        id: 'active-today',
+        title: 'Finish Lab 2',
+        dueDate: '2026-11-27',
+        status: 'done',
+        group: 'Ôn thi Vật lý 2',
+      }),
+      makeTask({
+        id: 'scheduled-today',
+        title: 'Mock Exam',
+        dueDate: '2026-11-27',
+        group: 'Đề Lý 2',
+      }),
+    ];
+
+    expect(isTaskInBacklog(tasks[0]!)).toBe(true);
+    expect(isTaskInBacklog(tasks[1]!)).toBe(true);
+    expect(isTaskInBacklog(tasks[2]!)).toBe(false);
+    expect(isTaskInBacklog(tasks[3]!)).toBe(false);
+
+    expect(
+      filterAndSortTasks(tasks, { ...base, preset: 'backlog' }).map((t) => t.id),
+    ).toEqual(['backlog-explicit', 'backlog-unscheduled']);
+
+    expect(
+      filterAndSortTasks(tasks, { ...base, preset: 'today' }).map((t) => t.id),
+    ).toEqual(['scheduled-today']);
+
+    expect(
+      filterAndSortTasks(tasks, { ...base, preset: 'active' }).map((t) => t.id),
+    ).toEqual(['scheduled-today', 'active-no-date']);
+
+    expect(
+      filterAndSortTasks(tasks, { ...base, preset: 'all' }),
+    ).toHaveLength(5);
+
+    expect(parseQuickAddTaskInput('Giải đề chương 2 @Đề Lý 2')).toEqual({
+      title: 'Giải đề chương 2',
+      group: 'Đề Lý 2',
+    });
+    expect(parseQuickAddTaskInput('@"Ôn thi Vật lý 2" Đọc giáo trình')).toEqual({
+      title: 'Đọc giáo trình',
+      group: 'Ôn thi Vật lý 2',
+    });
+
+    const buckets = groupTasksByGroup(tasks);
+    expect(
+      buckets.map((b) => ({
+        groupName: b.groupName,
+        completed: b.completedCount,
+        total: b.totalCount,
+      })),
+    ).toEqual([
+      { groupName: 'Đề Lý 2', completed: 0, total: 1 },
+      { groupName: 'Ôn thi Vật lý 2', completed: 1, total: 3 },
+      { groupName: null, completed: 0, total: 1 },
+    ]);
   });
 });
 

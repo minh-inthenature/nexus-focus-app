@@ -1,19 +1,33 @@
 import { useState, type DragEvent } from 'react';
-import { Calendar, Check, FileText } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Calendar,
+  Check,
+  FileText,
+  FolderKanban,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
+import type { TaskGroupByMode } from '@/features/tasks/stores/useTasksStore';
 import {
   getTodayDateString,
+  groupTasksByGroup,
+  isTaskInBacklog,
   isTaskOverdue,
 } from '@/features/tasks/utils/taskFilters';
 import type { NoteRecord, TaskRecord, TaskStatus } from '@/services';
 import { cn } from '@/utils/cn';
+import { TaskGroupHeader } from './TaskGroupHeader';
 
 export interface TaskBoardViewProps {
   tasks: readonly TaskRecord[];
   notesById: ReadonlyMap<string, NoteRecord>;
+  groupBy: TaskGroupByMode;
   onToggleComplete: (taskId: string) => Promise<void>;
   onChangeStatus: (taskId: string, status: TaskStatus) => Promise<void>;
   onEditTask: (taskId: string) => void;
+  onMoveToActive: (taskId: string) => Promise<void>;
+  onScheduleToday: (taskId: string) => Promise<void>;
+  onAddTaskToGroup: (groupName: string) => void;
 }
 
 const COLUMNS: readonly { id: TaskStatus; label: string }[] = [
@@ -23,18 +37,31 @@ const COLUMNS: readonly { id: TaskStatus; label: string }[] = [
 ];
 
 /**
- * Minimal three-column Kanban board supporting both drag-and-drop and
- * accessible status selectors for moving tasks between columns.
+ * Minimal three-column Kanban board supporting drag-and-drop, collapsible Task
+ * Group sections inside columns, Backlog quick actions, and status selectors.
  */
 export function TaskBoardView({
   tasks,
   notesById,
+  groupBy,
   onToggleComplete,
   onChangeStatus,
   onEditTask,
+  onMoveToActive,
+  onScheduleToday,
+  onAddTaskToGroup,
 }: TaskBoardViewProps) {
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<
+    Record<string, boolean>
+  >({});
   const today = getTodayDateString();
+  const hasAnyGroups = tasks.some((t) => Boolean(t.group?.trim()));
+  const showGrouped = groupBy === 'group' && hasAnyGroups;
+
+  const toggleGroupCollapsed = (key: string) => {
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const handleDrop = async (
     event: DragEvent<HTMLElement>,
@@ -48,11 +75,153 @@ export function TaskBoardView({
     }
   };
 
+  const renderTaskCard = (task: TaskRecord) => {
+    const overdue = isTaskOverdue(task, today);
+    const inBacklog = isTaskInBacklog(task);
+    const isDone = task.status === 'done';
+    const linkedCount = task.linkedNoteIds.filter((id) =>
+      notesById.has(id),
+    ).length;
+
+    return (
+      <div
+        key={task.id}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/nexus-task-id', task.id);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        className="space-y-2 rounded-xl border border-border bg-card p-3 transition-colors duration-150 hover:border-ring/60"
+      >
+        <div className="flex items-start gap-2">
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={isDone}
+            aria-label={
+              isDone ? `Reopen "${task.title}"` : `Complete "${task.title}"`
+            }
+            onClick={() => void onToggleComplete(task.id)}
+            className={cn(
+              'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors duration-150 cursor-pointer',
+              isDone
+                ? 'border-focus-accent/60 bg-focus-surface text-focus-foreground'
+                : 'border-border bg-background hover:border-primary/70',
+            )}
+          >
+            {isDone ? (
+              <Check className="h-3 w-3" aria-hidden="true" />
+            ) : null}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onEditTask(task.id)}
+            className={cn(
+              'flex-1 text-left text-xs font-medium leading-snug hover:underline cursor-pointer',
+              isDone ? 'text-muted-foreground line-through' : 'text-foreground',
+            )}
+          >
+            {task.title}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {!showGrouped && task.group ? (
+              <span className="inline-flex items-center gap-1 rounded border border-border bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-foreground/85">
+                <FolderKanban
+                  className="h-2.5 w-2.5 text-primary/85"
+                  aria-hidden="true"
+                />
+                <span>{task.group}</span>
+              </span>
+            ) : null}
+
+            <span
+              className={cn(
+                'rounded border px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                task.priority === 'high'
+                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-500'
+                  : 'border-border bg-muted/50 text-muted-foreground',
+              )}
+            >
+              {task.priority}
+            </span>
+
+            {task.dueDate ? (
+              <Link
+                to={`/calendar?date=${task.dueDate}`}
+                title={`View ${task.dueDate} in Calendar`}
+                className={cn(
+                  'inline-flex items-center gap-1 font-mono text-[10px] hover:underline',
+                  overdue
+                    ? 'font-medium text-destructive'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Calendar className="h-2.5 w-2.5" aria-hidden="true" />
+                <span>{task.dueDate}</span>
+              </Link>
+            ) : null}
+
+            {linkedCount > 0 ? (
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                <FileText className="h-2.5 w-2.5" aria-hidden="true" />
+                <span>{linkedCount}</span>
+              </span>
+            ) : null}
+          </div>
+
+          <div className="flex items-center gap-1">
+            {inBacklog ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void onScheduleToday(task.id)}
+                  title="Schedule for Today"
+                  className="inline-flex h-6 items-center gap-0.5 rounded border border-primary/40 bg-primary/10 px-1.5 text-[10px] font-medium text-primary hover:bg-primary/20 cursor-pointer"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onMoveToActive(task.id)}
+                  title="Move to Active"
+                  aria-label={`Move "${task.title}" to Active`}
+                  className="inline-flex h-6 items-center justify-center rounded border border-border bg-background px-1.5 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </>
+            ) : null}
+
+            {/* Accessible status move alternative to drag-and-drop */}
+            <select
+              aria-label={`Move "${task.title}" column`}
+              value={task.status}
+              onChange={(e) =>
+                void onChangeStatus(task.id, e.target.value as TaskStatus)
+              }
+              className="h-6 rounded border border-border bg-background px-1 text-[10px] text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+            >
+              <option value="todo">To do</option>
+              <option value="in_progress">In progress</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       {COLUMNS.map((col) => {
         const colTasks = tasks.filter((t) => t.status === col.id);
         const isDragOver = dragOverColumn === col.id;
+        const colHasGroups =
+          showGrouped && colTasks.some((t) => Boolean(t.group?.trim()));
 
         return (
           <section
@@ -85,124 +254,34 @@ export function TaskBoardView({
                 <p className="py-8 text-center text-xs text-muted-foreground/70">
                   No tasks
                 </p>
-              ) : (
-                colTasks.map((task) => {
-                  const overdue = isTaskOverdue(task, today);
-                  const isDone = task.status === 'done';
-                  const linkedCount = task.linkedNoteIds.filter((id) =>
-                    notesById.has(id),
-                  ).length;
-
+              ) : colHasGroups ? (
+                groupTasksByGroup(colTasks).map((bucket) => {
+                  const key = `${col.id}:${bucket.groupName ?? '__ungrouped__'}`;
+                  const collapsed = Boolean(collapsedGroups[key]);
                   return (
                     <div
-                      key={task.id}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/nexus-task-id', task.id);
-                        e.dataTransfer.effectAllowed = 'move';
-                      }}
-                      className="space-y-2 rounded-xl border border-border bg-card p-3 transition-colors duration-150 hover:border-ring/60"
+                      key={key}
+                      className="overflow-hidden rounded-lg border border-border/80 bg-background/40"
                     >
-                      <div className="flex items-start gap-2">
-                        <button
-                          type="button"
-                          role="checkbox"
-                          aria-checked={isDone}
-                          aria-label={
-                            isDone
-                              ? `Reopen "${task.title}"`
-                              : `Complete "${task.title}"`
-                          }
-                          onClick={() => void onToggleComplete(task.id)}
-                          className={cn(
-                            'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors duration-150 cursor-pointer',
-                            isDone
-                              ? 'border-focus-accent/60 bg-focus-surface text-focus-foreground'
-                              : 'border-border bg-background hover:border-primary/70',
-                          )}
-                        >
-                          {isDone ? (
-                            <Check className="h-3 w-3" aria-hidden="true" />
-                          ) : null}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => onEditTask(task.id)}
-                          className={cn(
-                            'flex-1 text-left text-xs font-medium leading-snug hover:underline cursor-pointer',
-                            isDone
-                              ? 'text-muted-foreground line-through'
-                              : 'text-foreground',
-                          )}
-                        >
-                          {task.title}
-                        </button>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span
-                            className={cn(
-                              'rounded border px-1.5 py-0.5 text-[10px] font-medium capitalize',
-                              task.priority === 'high'
-                                ? 'border-amber-500/40 bg-amber-500/10 text-amber-500'
-                                : 'border-border bg-muted/50 text-muted-foreground',
-                            )}
-                          >
-                            {task.priority}
-                          </span>
-
-                          {task.dueDate ? (
-                            <Link
-                              to={`/calendar?date=${task.dueDate}`}
-                              title={`View ${task.dueDate} in Calendar`}
-                              className={cn(
-                                'inline-flex items-center gap-1 font-mono text-[10px] hover:underline',
-                                overdue
-                                  ? 'font-medium text-destructive'
-                                  : 'text-muted-foreground hover:text-foreground',
-                              )}
-                            >
-                              <Calendar
-                                className="h-2.5 w-2.5"
-                                aria-hidden="true"
-                              />
-                              <span>{task.dueDate}</span>
-                            </Link>
-                          ) : null}
-
-                          {linkedCount > 0 ? (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                              <FileText
-                                className="h-2.5 w-2.5"
-                                aria-hidden="true"
-                              />
-                              <span>{linkedCount}</span>
-                            </span>
-                          ) : null}
+                      <TaskGroupHeader
+                        groupName={bucket.groupName}
+                        completedCount={bucket.completedCount}
+                        totalCount={bucket.totalCount}
+                        collapsed={collapsed}
+                        compact
+                        onToggleCollapse={() => toggleGroupCollapsed(key)}
+                        onAddTaskToGroup={onAddTaskToGroup}
+                      />
+                      {!collapsed ? (
+                        <div className="space-y-2 border-t border-border/60 p-2">
+                          {bucket.tasks.map(renderTaskCard)}
                         </div>
-
-                        {/* Accessible status move alternative to drag-and-drop */}
-                        <select
-                          aria-label={`Move "${task.title}" column`}
-                          value={task.status}
-                          onChange={(e) =>
-                            void onChangeStatus(
-                              task.id,
-                              e.target.value as TaskStatus,
-                            )
-                          }
-                          className="h-6 rounded border border-border bg-background px-1 text-[10px] text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
-                        >
-                          <option value="todo">To do</option>
-                          <option value="in_progress">In progress</option>
-                          <option value="done">Done</option>
-                        </select>
-                      </div>
+                      ) : null}
                     </div>
                   );
                 })
+              ) : (
+                colTasks.map(renderTaskCard)
               )}
             </div>
           </section>

@@ -154,7 +154,7 @@ export function NoteTopBar({
 
   return (
     <>
-      <header className="flex min-w-0 max-w-full flex-col gap-1.5 border-b border-border bg-background px-3 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-2 md:px-4 md:py-2.5">
+      <header className="flex min-w-0 max-w-full flex-col gap-1.5 border-b border-border bg-background px-3 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-2 md:px-4 md:py-2.5 [.forest_&]:border-[#1E2623] [.forest_&]:bg-[#0D1210]">
         {/* Left: Explorer toggle + Title + Folder Selector */}
         <div className="flex w-full min-w-0 flex-1 items-center gap-2 overflow-hidden md:w-auto md:min-w-[200px]">
           {!isFullscreen ? (

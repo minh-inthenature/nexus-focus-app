@@ -454,7 +454,7 @@ export function NoteEditorWorkspace({
 
       {/* Main Editor / Preview / Canvas Surface */}
       {canvasMode ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background [.dark_&]:bg-[#141414]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background [.dark_&]:bg-[#141414] [.forest_&]:bg-[#111614]">
           <Suspense
             fallback={
               <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
@@ -473,7 +473,7 @@ export function NoteEditorWorkspace({
         <div
           className={cn(
             'min-w-0 max-w-full flex-1 overflow-y-auto overflow-x-hidden',
-            codeMode && '[.dark_&]:bg-[#141414]',
+            codeMode && '[.dark_&]:bg-[#141414] [.forest_&]:bg-[#111614]',
           )}
         >
           <div
@@ -579,7 +579,7 @@ export function NoteEditorWorkspace({
       {metadataPanelCollapsed ? (
         <div
           data-testid="collapsed-metadata-bar"
-          className="shrink-0 border-t border-border bg-card/30 px-4 py-1.5 transition-all duration-200 md:px-10"
+          className="shrink-0 border-t border-border bg-card/30 px-4 py-1.5 transition-all duration-200 md:px-10 [.forest_&]:border-[#1E2623] [.forest_&]:bg-[#0D1210]"
         >
           <button
             type="button"
@@ -620,7 +620,7 @@ export function NoteEditorWorkspace({
       )}
 
       {/* Footer Metrics */}
-      <footer className="flex items-center justify-between border-t border-border bg-background px-4 py-1.5 text-[11px] text-muted-foreground md:px-10">
+      <footer className="flex items-center justify-between border-t border-border bg-background px-4 py-1.5 text-[11px] text-muted-foreground md:px-10 [.forest_&]:border-[#1E2623] [.forest_&]:bg-[#0D1210] [.forest_&]:text-[#7E8B85]">
         <div className="flex items-center gap-4">
           {canvasMode ? (
             <>

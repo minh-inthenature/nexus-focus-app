@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Check,
   CheckSquare,
@@ -17,11 +18,21 @@ import {
   getEventAccentClasses,
   getMonthGridDates,
   getTodayDateKey,
+  resolveEventColor,
   WEEKDAY_LABELS,
 } from '@/features/calendar/utils/calendarDateUtils';
 import { isTaskOverdue } from '@/features/tasks/utils/taskFilters';
-import type { CalendarEventRecord, NoteRecord, TaskRecord } from '@/services';
+import type {
+  CalendarEventRecord,
+  EventColor,
+  NoteRecord,
+  TaskRecord,
+} from '@/services';
 import { cn } from '@/utils/cn';
+import {
+  EventColorContextMenu,
+  type EventColorContextMenuState,
+} from './EventColorSwatches';
 
 export interface CalendarMonthViewProps {
   selectedDate: string;
@@ -35,6 +46,7 @@ export interface CalendarMonthViewProps {
   onCreateEventOnDate: (dateKey: string) => void;
   onCreateTaskOnDate: (dateKey: string) => void;
   onEditEvent: (eventId: string) => void;
+  onChangeEventColor?: (eventId: string, color: EventColor) => Promise<void>;
   onToggleTaskCompleted: (taskId: string) => Promise<void>;
 }
 
@@ -57,8 +69,12 @@ export function CalendarMonthView({
   onCreateEventOnDate,
   onCreateTaskOnDate,
   onEditEvent,
+  onChangeEventColor,
   onToggleTaskCompleted,
 }: CalendarMonthViewProps) {
+  const [colorMenu, setColorMenu] = useState<EventColorContextMenuState | null>(
+    null,
+  );
   const todayKey = getTodayDateKey();
   const activeMonthPrefix = selectedDate.slice(0, 7);
   const gridDates = getMonthGridDates(selectedDate);
@@ -184,6 +200,21 @@ export function CalendarMonthView({
                             e.stopPropagation();
                             onSelectDate(dateKey);
                             onEditEvent(ev.id);
+                          }}
+                          onContextMenu={(e) => {
+                            if (!onChangeEventColor) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setColorMenu({
+                              eventId: ev.id,
+                              title: ev.title,
+                              currentColor: resolveEventColor(
+                                ev.category,
+                                ev.color,
+                              ),
+                              x: e.clientX,
+                              y: e.clientY,
+                            });
                           }}
                           title={`${ev.title} (${CATEGORY_LABELS[ev.category]})${ev.rrule ? ' • Repeats' : ''}`}
                           className={cn(
@@ -476,6 +507,14 @@ export function CalendarMonthView({
           </div>
         )}
       </section>
+
+      <EventColorContextMenu
+        menu={colorMenu}
+        onSelectColor={(eventId, nextColor) => {
+          void onChangeEventColor?.(eventId, nextColor);
+        }}
+        onClose={() => setColorMenu(null)}
+      />
     </div>
   );
 }

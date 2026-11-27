@@ -152,8 +152,8 @@ export function FolderTree({
         className={cn(
           'group flex h-7 items-center justify-between gap-1 rounded-md pr-1.5 text-[13px] transition-colors',
           isActive
-            ? 'bg-accent text-accent-foreground'
-            : 'text-sidebar-foreground/85 hover:bg-accent/60 hover:text-accent-foreground',
+            ? 'bg-accent text-accent-foreground [.forest_&]:bg-[#18221E] [.forest_&]:text-[#8AB8A3] [.forest_&]:shadow-[inset_2px_0_0_#8AB8A3]'
+            : 'text-sidebar-foreground/85 hover:bg-accent/60 hover:text-accent-foreground [.forest_&]:text-[#E4E8E6]/85 [.forest_&]:hover:bg-white/[0.05] [.forest_&]:hover:text-[#E4E8E6]',
         )}
       >
         {isRenaming ? (
@@ -178,22 +178,42 @@ export function FolderTree({
             >
               {note.isDaily ? (
                 <Calendar
-                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                  className={cn(
+                    'h-3.5 w-3.5 shrink-0 text-muted-foreground',
+                    isActive
+                      ? '[.forest_&]:text-[#8AB8A3]'
+                      : '[.forest_&]:text-[#6E7D76]',
+                  )}
                   aria-hidden="true"
                 />
               ) : isCanvas ? (
                 <Shapes
-                  className="h-3.5 w-3.5 shrink-0 text-primary/85"
+                  className={cn(
+                    'h-3.5 w-3.5 shrink-0 text-primary/85',
+                    isActive
+                      ? '[.forest_&]:text-[#8AB8A3]'
+                      : '[.forest_&]:text-[#6E7D76]',
+                  )}
                   aria-hidden="true"
                 />
               ) : codeMeta ? (
                 <FileCode2
-                  className="h-3.5 w-3.5 shrink-0 text-primary/85"
+                  className={cn(
+                    'h-3.5 w-3.5 shrink-0 text-primary/85',
+                    isActive
+                      ? '[.forest_&]:text-[#8AB8A3]'
+                      : '[.forest_&]:text-[#6E7D76]',
+                  )}
                   aria-hidden="true"
                 />
               ) : (
                 <FileText
-                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                  className={cn(
+                    'h-3.5 w-3.5 shrink-0 text-muted-foreground',
+                    isActive
+                      ? '[.forest_&]:text-[#8AB8A3]'
+                      : '[.forest_&]:text-[#6E7D76]',
+                  )}
                   aria-hidden="true"
                 />
               )}
@@ -318,23 +338,23 @@ export function FolderTree({
                     >
                       {isExpanded ? (
                         <ChevronDown
-                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground [.forest_&]:text-[#6E7D76]"
                           aria-hidden="true"
                         />
                       ) : (
                         <ChevronRight
-                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground [.forest_&]:text-[#6E7D76]"
                           aria-hidden="true"
                         />
                       )}
                       {isExpanded ? (
                         <FolderOpen
-                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground [.forest_&]:text-[#6E7D76]"
                           aria-hidden="true"
                         />
                       ) : (
                         <Folder
-                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground [.forest_&]:text-[#6E7D76]"
                           aria-hidden="true"
                         />
                       )}

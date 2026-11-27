@@ -23,6 +23,7 @@ import {
   addOneHourHHMM,
   buildAllDayRange,
   buildTimedRange,
+  DEFAULT_EVENT_COLOR,
   EVENT_CATEGORIES,
   EVENT_COLOR_OPTIONS,
   formatLocalTimeHHMM,
@@ -30,8 +31,10 @@ import {
   getLocalTimezone,
   getTodayDateKey,
   isValidDateKey,
+  resolveEventColor,
   validateEventRange,
 } from '@/features/calendar/utils/calendarDateUtils';
+import { EventColorSwatches } from './EventColorSwatches';
 import {
   buildRrule,
   dateKeyToWeekdayCode,
@@ -46,6 +49,7 @@ import {
 import type {
   CalendarEventRecord,
   EventCategory,
+  EventColor,
   NoteRecord,
   TaskRecord,
 } from '@/services';
@@ -68,7 +72,7 @@ export interface CalendarEventDialogProps {
     allDay: boolean;
     timezone: string;
     category: EventCategory;
-    color: string;
+    color: EventColor;
     linkedNoteIds: string[];
     linkedTaskIds: string[];
     rrule: string | null;
@@ -214,7 +218,7 @@ export function CalendarEventDialog({
   const [untilDateKey, setUntilDateKey] = useState('');
   const [customTouched, setCustomTouched] = useState(false);
   const [category, setCategory] = useState<EventCategory>('personal');
-  const [color, setColor] = useState<string>('default');
+  const [color, setColor] = useState<EventColor>(DEFAULT_EVENT_COLOR);
   const [linkedNoteIds, setLinkedNoteIds] = useState<string[]>([]);
   const [linkedTaskIds, setLinkedTaskIds] = useState<string[]>([]);
   const [notePickerId, setNotePickerId] = useState('');
@@ -253,7 +257,7 @@ export function CalendarEventDialog({
       setUntilDateKey(rep.untilDateKey);
       setCustomTouched(rep.customTouched);
       setCategory(event.category);
-      setColor(event.color ?? 'default');
+      setColor(resolveEventColor(event.category, event.color));
       setLinkedNoteIds([...event.linkedNoteIds]);
       setLinkedTaskIds([...event.linkedTaskIds]);
     } else {
@@ -285,7 +289,7 @@ export function CalendarEventDialog({
       setUntilDateKey('');
       setCustomTouched(false);
       setCategory('personal');
-      setColor('default');
+      setColor(DEFAULT_EVENT_COLOR);
       setLinkedNoteIds([...(draftDefaults?.linkedNoteIds ?? [])]);
       setLinkedTaskIds([...(draftDefaults?.linkedTaskIds ?? [])]);
     }
@@ -790,25 +794,26 @@ export function CalendarEventDialog({
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label
-                  htmlFor="event-color-select"
-                  className="text-xs font-medium text-muted-foreground"
-                >
-                  Accent color
-                </label>
-                <select
-                  id="event-color-select"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
-                >
-                  {EVENT_COLOR_OPTIONS.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    id="event-color-label"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    Color label
+                  </span>
+                  <span className="text-[11px] text-muted-foreground/80">
+                    {EVENT_COLOR_OPTIONS.find((opt) => opt.id === color)?.label ??
+                      'Ocean Blue'}
+                  </span>
+                </div>
+                <div className="flex h-8 items-center">
+                  <EventColorSwatches
+                    value={color}
+                    onChange={setColor}
+                    labelledBy="event-color-label"
+                  />
+                </div>
               </div>
             </div>
 

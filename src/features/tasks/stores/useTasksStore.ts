@@ -19,6 +19,7 @@ import {
 import { useAuthStore } from '@/stores/useAuthStore';
 
 export type TaskViewMode = 'list' | 'board' | 'schedule';
+export type TaskGroupByMode = 'group' | 'none';
 export type TaskSaveStatus = 'saved' | 'saving' | 'error';
 
 interface TasksStoreState {
@@ -29,6 +30,7 @@ interface TasksStoreState {
   error: string | null;
 
   viewMode: TaskViewMode;
+  groupBy: TaskGroupByMode;
   preset: TaskFilterPreset;
   statusFilter: TaskStatus | 'all';
   priorityFilter: TaskPriority | 'all';
@@ -40,10 +42,14 @@ interface TasksStoreState {
   editorOpen: boolean;
   editingTaskId: string | null;
   prefillLinkedNoteIds: string[];
+  prefillGroup: string | null;
+  prefillBacklog: boolean;
 
   initialize: (force?: boolean) => Promise<void>;
   refreshTasks: () => Promise<void>;
   setViewMode: (mode: TaskViewMode) => void;
+  setGroupBy: (mode: TaskGroupByMode) => void;
+  toggleGroupBy: () => void;
   setPreset: (preset: TaskFilterPreset) => void;
   setStatusFilter: (status: TaskStatus | 'all') => void;
   setPriorityFilter: (priority: TaskPriority | 'all') => void;
@@ -53,7 +59,10 @@ interface TasksStoreState {
   setSortBy: (sortBy: TaskSortBy) => void;
   clearFilters: () => void;
 
-  openCreateModal: (linkedNoteIds?: string[]) => void;
+  openCreateModal: (
+    linkedNoteIds?: string[],
+    options?: { group?: string | null; isBacklog?: boolean },
+  ) => void;
   openEditModal: (taskId: string) => void;
   closeEditor: () => void;
 
@@ -79,6 +88,7 @@ export const useTasksStore = create<TasksStoreState>()(
       error: null,
 
       viewMode: 'list',
+      groupBy: 'group',
       preset: 'active',
       statusFilter: 'all',
       priorityFilter: 'all',
@@ -90,6 +100,8 @@ export const useTasksStore = create<TasksStoreState>()(
       editorOpen: false,
       editingTaskId: null,
       prefillLinkedNoteIds: [],
+      prefillGroup: null,
+      prefillBacklog: false,
 
       initialize: async (force = false) => {
         if (get().initialized && !force) return;
@@ -122,6 +134,11 @@ export const useTasksStore = create<TasksStoreState>()(
       },
 
       setViewMode: (mode) => set({ viewMode: mode }),
+      setGroupBy: (groupBy) => set({ groupBy }),
+      toggleGroupBy: () =>
+        set((state) => ({
+          groupBy: state.groupBy === 'group' ? 'none' : 'group',
+        })),
       setPreset: (preset) => set({ preset }),
       setStatusFilter: (statusFilter) => set({ statusFilter }),
       setPriorityFilter: (priorityFilter) => set({ priorityFilter }),
@@ -139,11 +156,13 @@ export const useTasksStore = create<TasksStoreState>()(
           searchQuery: '',
         }),
 
-      openCreateModal: (linkedNoteIds = []) =>
+      openCreateModal: (linkedNoteIds = [], options) =>
         set({
           editorOpen: true,
           editingTaskId: null,
           prefillLinkedNoteIds: linkedNoteIds,
+          prefillGroup: options?.group ?? null,
+          prefillBacklog: Boolean(options?.isBacklog),
         }),
 
       openEditModal: (taskId) =>
@@ -151,6 +170,8 @@ export const useTasksStore = create<TasksStoreState>()(
           editorOpen: true,
           editingTaskId: taskId,
           prefillLinkedNoteIds: [],
+          prefillGroup: null,
+          prefillBacklog: false,
         }),
 
       closeEditor: () =>
@@ -158,6 +179,8 @@ export const useTasksStore = create<TasksStoreState>()(
           editorOpen: false,
           editingTaskId: null,
           prefillLinkedNoteIds: [],
+          prefillGroup: null,
+          prefillBacklog: false,
         }),
 
       createTask: async (input) => {
@@ -228,6 +251,7 @@ export const useTasksStore = create<TasksStoreState>()(
       name: TASKS_UI_STORAGE_KEY,
       partialize: (state) => ({
         viewMode: state.viewMode,
+        groupBy: state.groupBy,
       }),
     },
   ),

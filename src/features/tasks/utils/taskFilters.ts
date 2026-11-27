@@ -11,7 +11,8 @@ export type TaskFilterPreset =
   | 'overdue'
   | 'completed'
   | 'high_priority'
-  | 'all';
+  | 'all'
+  | 'backlog';
 
 export type TaskSortBy = 'dueDate' | 'priority' | 'createdAt' | 'updatedAt';
 
@@ -94,11 +95,21 @@ export function normalizeTaskTags(tags: readonly string[]): string[] {
   return normalized;
 }
 
+/**
+ * Returns true when an uncompleted task is unscheduled or explicitly marked as Backlog.
+ */
+export function isTaskInBacklog(task: TaskRecord): boolean {
+  if (task.status === 'done') return false;
+  if (task.isBacklog === true) return true;
+  return !task.dueDate && task.isBacklog !== false;
+}
+
 export function isTaskOverdue(
   task: TaskRecord,
   todayStr: string = getTodayDateString(),
 ): boolean {
   return (
+    !isTaskInBacklog(task) &&
     task.status !== 'done' &&
     Boolean(task.dueDate) &&
     (task.dueDate ?? '') < todayStr
@@ -116,7 +127,7 @@ export function isTaskUpcoming(
   task: TaskRecord,
   todayStr: string = getTodayDateString(),
 ): boolean {
-  if (task.status === 'done') return false;
+  if (task.status === 'done' || isTaskInBacklog(task)) return false;
   const dueUpcoming = Boolean(task.dueDate) && (task.dueDate ?? '') >= todayStr;
   const startUpcoming =
     Boolean(task.startDate) && (task.startDate ?? '') >= todayStr;
@@ -145,6 +156,105 @@ export function extractAllTaskCategories(
   return Array.from(set).sort((a, b) => a.localeCompare(b));
 }
 
+export function extractAllTaskGroups(tasks: readonly TaskRecord[]): string[] {
+  const set = new Set<string>();
+  for (const task of tasks) {
+    if (task.group?.trim()) {
+      set.add(task.group.trim());
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+export interface TaskGroupBucket {
+  readonly groupName: string | null;
+  readonly tasks: TaskRecord[];
+  readonly completedCount: number;
+  readonly totalCount: number;
+}
+
+/**
+ * Bundles tasks by their `group` name (sorted alphabetically), keeping ungrouped
+ * tasks in a final `groupName: null` bucket.
+ */
+export function groupTasksByGroup(
+  tasks: readonly TaskRecord[],
+): TaskGroupBucket[] {
+  const namedMap = new Map<string, TaskRecord[]>();
+  const ungrouped: TaskRecord[] = [];
+
+  for (const task of tasks) {
+    const cleanGroup = task.group?.trim();
+    if (cleanGroup) {
+      const list = namedMap.get(cleanGroup) ?? [];
+      list.push(task);
+      namedMap.set(cleanGroup, list);
+    } else {
+      ungrouped.push(task);
+    }
+  }
+
+  const buckets: TaskGroupBucket[] = Array.from(namedMap.keys())
+    .sort((a, b) => a.localeCompare(b))
+    .map((groupName) => {
+      const items = namedMap.get(groupName) ?? [];
+      const completedCount = items.filter((t) => t.status === 'done').length;
+      return {
+        groupName,
+        tasks: items,
+        completedCount,
+        totalCount: items.length,
+      };
+    });
+
+  if (ungrouped.length > 0) {
+    buckets.push({
+      groupName: null,
+      tasks: ungrouped,
+      completedCount: ungrouped.filter((t) => t.status === 'done').length,
+      totalCount: ungrouped.length,
+    });
+  }
+
+  return buckets;
+}
+
+/**
+ * Parses `@"Group Name"` or trailing `@Group Name` syntax from quick-add input.
+ */
+export function parseQuickAddTaskInput(
+  rawInput: string,
+  explicitGroup?: string,
+): { title: string; group?: string } {
+  const trimmedExplicit = explicitGroup?.trim();
+  let working = rawInput.trim();
+  let parsedGroup: string | undefined;
+
+  const quotedMatch = working.match(/(?:^|\s)@"([^"]+)"(?:\s|$)/);
+  if (quotedMatch) {
+    parsedGroup = quotedMatch[1]?.trim() || undefined;
+    working = working.replace(quotedMatch[0], ' ').replace(/\s+/g, ' ').trim();
+  } else {
+    const trailingMatch = working.match(/\s@([^\s@][^@]*)$/);
+    if (trailingMatch) {
+      parsedGroup = trailingMatch[1]?.trim() || undefined;
+      working = working.slice(0, trailingMatch.index).trim();
+    } else {
+      const tokenMatch = working.match(/(?:^|\s)@([^\s@]+)(?:\s|$)/);
+      if (tokenMatch) {
+        parsedGroup = tokenMatch[1]?.trim() || undefined;
+        working = working.replace(tokenMatch[0], ' ').replace(/\s+/g, ' ').trim();
+      }
+    }
+  }
+
+  const resolvedGroup = trimmedExplicit || parsedGroup;
+  return {
+    title: working || rawInput.trim(),
+    ...(resolvedGroup ? { group: resolvedGroup } : {}),
+  };
+}
+
 export function filterAndSortTasks(
   tasks: readonly TaskRecord[],
   options: FilterAndSortTasksOptions,
@@ -158,10 +268,16 @@ export function filterAndSortTasks(
   const filtered = tasks.filter((task) => {
     switch (options.preset) {
       case 'active':
-        if (task.status === 'done') return false;
+        if (task.status === 'done' || isTaskInBacklog(task)) return false;
         break;
       case 'today':
-        if (task.status === 'done' || !isTaskDueToday(task, today)) return false;
+        if (
+          task.status === 'done' ||
+          isTaskInBacklog(task) ||
+          !isTaskDueToday(task, today)
+        ) {
+          return false;
+        }
         break;
       case 'upcoming':
         if (!isTaskUpcoming(task, today)) return false;
@@ -174,6 +290,9 @@ export function filterAndSortTasks(
         break;
       case 'high_priority':
         if (task.status === 'done' || task.priority !== 'high') return false;
+        break;
+      case 'backlog':
+        if (!isTaskInBacklog(task)) return false;
         break;
       case 'all':
         break;
@@ -208,8 +327,9 @@ export function filterAndSortTasks(
       const titleMatch = task.title.toLowerCase().includes(q);
       const descMatch = (task.description ?? '').toLowerCase().includes(q);
       const catMatch = (task.category ?? '').toLowerCase().includes(q);
+      const groupMatch = (task.group ?? '').toLowerCase().includes(q);
       const tagMatch = task.tags.some((t) => t.includes(q.replace(/^#+/, '')));
-      if (!titleMatch && !descMatch && !catMatch && !tagMatch) {
+      if (!titleMatch && !descMatch && !catMatch && !groupMatch && !tagMatch) {
         return false;
       }
     }

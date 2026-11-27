@@ -68,34 +68,34 @@
 }
 
 .forest {
-  --background: #163226;
-  --foreground: #f3f1ec;
-  --sidebar: #11271e;
-  --sidebar-foreground: #f3f1ec;
-  --sidebar-border: rgba(243, 241, 236, 0.09);
-  --sidebar-accent: #1c3d2f;
-  --sidebar-accent-foreground: #f3f1ec;
-  --card: #1c3d2f;
-  --card-foreground: #f3f1ec;
-  --popover: #1c3d2f;
-  --popover-foreground: #f3f1ec;
+  --background: #111614;
+  --foreground: #e4e8e6;
+  --sidebar: #0a0e0c;
+  --sidebar-foreground: #e4e8e6;
+  --sidebar-border: #1e2623;
+  --sidebar-accent: #18221e;
+  --sidebar-accent-foreground: #8ab8a3;
+  --card: #0d1210;
+  --card-foreground: #e4e8e6;
+  --popover: #0d1210;
+  --popover-foreground: #e4e8e6;
   --primary: #d97757;
-  --primary-foreground: #11271e;
-  --secondary: #1e4233;
-  --secondary-foreground: #f3f1ec;
-  --muted: #1e4233;
-  --muted-foreground: #a4bfb1;
-  --subtle-foreground: #749283;
-  --accent: #244c3a;
-  --accent-foreground: #f3f1ec;
+  --primary-foreground: #0a0e0c;
+  --secondary: #151c19;
+  --secondary-foreground: #e4e8e6;
+  --muted: #151c19;
+  --muted-foreground: #7e8b85;
+  --subtle-foreground: #6e7d76;
+  --accent: rgba(255, 255, 255, 0.05);
+  --accent-foreground: #e4e8e6;
   --destructive: #e57360;
-  --destructive-foreground: #11271e;
-  --border: rgba(243, 241, 236, 0.09);
-  --input: rgba(243, 241, 236, 0.09);
-  --ring: rgba(217, 119, 87, 0.5);
-  --focus-surface: #244c3a;
-  --focus-foreground: #d8f3dc;
-  --focus-accent: #74c69d;
+  --destructive-foreground: #0a0e0c;
+  --border: #1e2623;
+  --input: #1e2623;
+  --ring: rgba(138, 184, 163, 0.45);
+  --focus-surface: #18221e;
+  --focus-foreground: #8ab8a3;
+  --focus-accent: #8ab8a3;
   --radius: 0.625rem;
 }
 
@@ -355,6 +355,18 @@
   --color-primary-darkest: #b85739;
   --color-primary-light: rgba(217, 119, 87, 0.22);
   --color-primary-hover: #e58869;
+}
+
+.forest .nexus-excalidraw .excalidraw.theme--dark {
+  --default-bg-color: #111614;
+  --input-bg-color: #111614;
+  --island-bg-color: #0d1210;
+  --popup-bg-color: #0d1210;
+  --popup-secondary-bg-color: #18221e;
+  --button-gray-1: #18221e;
+  --button-gray-2: #111614;
+  --button-gray-3: #0d1210;
+  --default-border-color: #1e2623;
 }
 
 .nexus-excalidraw .excalidraw .App-menu_top .buttonList {

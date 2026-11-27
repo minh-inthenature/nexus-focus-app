@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Check,
   CheckSquare,
@@ -18,10 +18,21 @@ import {
   getEventAccentClasses,
   getTodayDateKey,
   layoutOverlappingTimedEvents,
+  resolveEventColor,
 } from '@/features/calendar/utils/calendarDateUtils';
 import { isTaskOverdue } from '@/features/tasks/utils/taskFilters';
-import type { CalendarEventRecord, NoteRecord, TaskRecord } from '@/services';
+import type {
+  CalendarEventRecord,
+  EventColor,
+  NoteRecord,
+  TaskRecord,
+} from '@/services';
 import { cn } from '@/utils/cn';
+import { CurrentTimeLine, useCurrentLocalTime } from './CurrentTimeLine';
+import {
+  EventColorContextMenu,
+  type EventColorContextMenuState,
+} from './EventColorSwatches';
 
 export interface CalendarDayViewProps {
   selectedDate: string;
@@ -33,6 +44,7 @@ export interface CalendarDayViewProps {
   onCreateEventAtSlot: (dateKey: string, startTimeHHMM?: string) => void;
   onCreateTaskOnDate: (dateKey: string) => void;
   onEditEvent: (eventId: string) => void;
+  onChangeEventColor?: (eventId: string, color: EventColor) => Promise<void>;
   onToggleTaskCompleted: (taskId: string) => Promise<void>;
 }
 
@@ -53,15 +65,26 @@ export function CalendarDayView({
   onCreateEventAtSlot,
   onCreateTaskOnDate,
   onEditEvent,
+  onChangeEventColor,
   onToggleTaskCompleted,
 }: CalendarDayViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const todayKey = getTodayDateKey();
+  const [colorMenu, setColorMenu] = useState<EventColorContextMenuState | null>(
+    null,
+  );
+  const nowTime = useCurrentLocalTime();
+  const todayKey = nowTime.dateKey || getTodayDateKey();
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = 8 * HOUR_HEIGHT_PX;
+      const targetHour =
+        selectedDate === todayKey
+          ? Math.max(0, Math.min(14, nowTime.hour - 3))
+          : 8;
+      scrollRef.current.scrollTop = targetHour * HOUR_HEIGHT_PX;
     }
+    // Re-center when switching day
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
   const allDayEvents = events.filter(
@@ -121,6 +144,18 @@ export function CalendarDayView({
             return (
               <div
                 key={`${ev.id}-${ev.startAt}`}
+                onContextMenu={(e) => {
+                  if (!onChangeEventColor) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setColorMenu({
+                    eventId: ev.id,
+                    title: ev.title,
+                    currentColor: resolveEventColor(ev.category, ev.color),
+                    x: e.clientX,
+                    y: e.clientY,
+                  });
+                }}
                 className={cn(
                   'flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs',
                   accent.surfaceClass,
@@ -289,6 +324,21 @@ export function CalendarDayView({
                       e.stopPropagation();
                       onEditEvent(event.id);
                     }}
+                    onContextMenu={(e) => {
+                      if (!onChangeEventColor) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setColorMenu({
+                        eventId: event.id,
+                        title: event.title,
+                        currentColor: resolveEventColor(
+                          event.category,
+                          event.color,
+                        ),
+                        x: e.clientX,
+                        y: e.clientY,
+                      });
+                    }}
                     style={{
                       top: `${metrics.topPercent}%`,
                       height: `${metrics.heightPercent}%`,
@@ -321,6 +371,10 @@ export function CalendarDayView({
                   </button>
                 );
               })}
+
+              {selectedDate === todayKey ? (
+                <CurrentTimeLine topPercent={nowTime.topPercent} />
+              ) : null}
             </div>
           </div>
         </div>
@@ -364,6 +418,14 @@ export function CalendarDayView({
           </div>
         </div>
       ) : null}
+
+      <EventColorContextMenu
+        menu={colorMenu}
+        onSelectColor={(eventId, nextColor) => {
+          void onChangeEventColor?.(eventId, nextColor);
+        }}
+        onClose={() => setColorMenu(null)}
+      />
     </div>
   );
 }

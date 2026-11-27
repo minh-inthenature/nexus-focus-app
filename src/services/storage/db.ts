@@ -87,6 +87,8 @@ export interface TaskRecord {
   readonly dueDate?: string;
   readonly tags: readonly string[];
   readonly category?: string;
+  readonly group?: string;
+  readonly isBacklog?: boolean;
   readonly linkedNoteIds: readonly EntityId[];
   readonly createdAt: ISODateString;
   readonly updatedAt: ISODateString;
@@ -104,6 +106,14 @@ export type EventCategory =
   | 'meeting'
   | 'other';
 
+export type EventColor =
+  | 'blue'
+  | 'sage'
+  | 'amber'
+  | 'rose'
+  | 'violet'
+  | 'slate';
+
 export interface CalendarEventRecord {
   readonly id: EntityId;
   readonly userId: EntityId;
@@ -115,7 +125,7 @@ export interface CalendarEventRecord {
   readonly allDay: boolean;
   readonly timezone?: string;
   readonly category: EventCategory;
-  readonly color?: string;
+  readonly color?: EventColor | string;
   readonly linkedNoteIds: readonly EntityId[];
   readonly linkedTaskIds: readonly EntityId[];
   readonly rrule?: string;

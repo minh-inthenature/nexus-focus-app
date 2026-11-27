@@ -24,6 +24,8 @@ export interface CreateTaskInput {
   readonly dueDate?: string;
   readonly tags?: readonly string[];
   readonly category?: string;
+  readonly group?: string;
+  readonly isBacklog?: boolean;
   readonly linkedNoteIds?: readonly string[];
 }
 
@@ -36,6 +38,8 @@ export interface UpdateTaskPatch {
   readonly dueDate?: string | null;
   readonly tags?: readonly string[];
   readonly category?: string | null;
+  readonly group?: string | null;
+  readonly isBacklog?: boolean;
   readonly linkedNoteIds?: readonly string[];
 }
 
@@ -95,6 +99,9 @@ export async function createTask(input: CreateTaskInput): Promise<TaskRecord> {
   const status: TaskStatus = input.status ?? 'todo';
   const description = input.description?.trim() || undefined;
   const category = input.category?.trim() || undefined;
+  const group = input.group?.trim() || undefined;
+  const isBacklog =
+    input.isBacklog !== undefined ? Boolean(input.isBacklog) : !dueDate;
 
   const task: TaskRecord = {
     id: createUuid(),
@@ -107,6 +114,8 @@ export async function createTask(input: CreateTaskInput): Promise<TaskRecord> {
     ...(dueDate ? { dueDate } : {}),
     tags: normalizeTaskTags(input.tags ?? []),
     ...(category ? { category } : {}),
+    ...(group ? { group } : {}),
+    ...(isBacklog ? { isBacklog: true } : { isBacklog: false }),
     linkedNoteIds: dedupeIds(input.linkedNoteIds),
     createdAt: now,
     updatedAt: now,
@@ -183,6 +192,24 @@ export async function updateTask(
             ? patch.category.trim() || undefined
             : existing.category;
 
+      const nextGroup =
+        patch.group === null
+          ? undefined
+          : patch.group !== undefined
+            ? patch.group.trim() || undefined
+            : existing.group;
+
+      const nextIsBacklog =
+        patch.isBacklog !== undefined
+          ? Boolean(patch.isBacklog)
+          : patch.dueDate !== undefined
+            ? !nextDueDate
+              ? existing.isBacklog ?? true
+              : !existing.dueDate && nextDueDate
+                ? false
+                : existing.isBacklog
+            : existing.isBacklog;
+
       const next: TaskRecord = {
         ...existing,
         title: nextTitle,
@@ -216,6 +243,8 @@ export async function updateTask(
         ...(nextStartDate ? { startDate: nextStartDate } : {}),
         ...(nextDueDate ? { dueDate: nextDueDate } : {}),
         ...(nextCategory ? { category: nextCategory } : {}),
+        ...(nextGroup ? { group: nextGroup } : {}),
+        ...(nextIsBacklog !== undefined ? { isBacklog: nextIsBacklog } : {}),
         ...(nextCompletedAt ? { completedAt: nextCompletedAt } : {}),
         ...(existing.lastSyncedRevision !== undefined
           ? { lastSyncedRevision: existing.lastSyncedRevision }

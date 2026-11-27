@@ -7,7 +7,7 @@ export interface ThemeProviderProps {
 
 const THEME_META_COLORS = {
   dark: '#1f1e1c',
-  forest: '#163226',
+  forest: '#111614',
   light: '#faf9f5',
 } as const;
 

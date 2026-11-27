@@ -100,7 +100,7 @@ export function CodeToolbar({
     <div
       role="toolbar"
       aria-label="Code file utilities"
-      className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto no-scrollbar border-b border-border bg-background px-3 py-1.5 md:flex-wrap md:overflow-visible md:px-4"
+      className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto no-scrollbar border-b border-border bg-background px-3 py-1.5 md:flex-wrap md:overflow-visible md:px-4 [.forest_&]:border-[#1E2623] [.forest_&]:bg-[#0D1210]"
     >
       {/* Left: Language Switcher */}
       <div className="flex shrink-0 items-center gap-2">

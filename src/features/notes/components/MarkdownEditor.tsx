@@ -93,10 +93,10 @@ export interface MarkdownEditorProps {
 function buildEditorTheme(theme: ResolvedTheme) {
   const isDark = theme !== 'light';
   const isForest = theme === 'forest';
-  const ink = isForest ? '#f3f1ec' : isDark ? '#eceae4' : '#1f1e1c';
-  const tooltipBg = isForest ? '#1c3d2f' : isDark ? '#272623' : '#ffffff';
+  const ink = isForest ? '#e4e8e6' : isDark ? '#eceae4' : '#1f1e1c';
+  const tooltipBg = isForest ? '#0d1210' : isDark ? '#272623' : '#ffffff';
   const tooltipBorder = isForest
-    ? 'rgba(243, 241, 236, 0.09)'
+    ? '#1e2623'
     : isDark
       ? 'rgba(236, 234, 228, 0.08)'
       : 'rgba(31, 30, 28, 0.09)';
@@ -135,12 +135,14 @@ function buildEditorTheme(theme: ResolvedTheme) {
             : 'rgba(200, 100, 69, 0.16)',
         },
       '.cm-activeLine': {
-        backgroundColor: isDark
-          ? 'rgba(236, 234, 228, 0.03)'
-          : 'rgba(31, 30, 28, 0.025)',
+        backgroundColor: isForest
+          ? 'rgba(255, 255, 255, 0.025)'
+          : isDark
+            ? 'rgba(236, 234, 228, 0.03)'
+            : 'rgba(31, 30, 28, 0.025)',
       },
       '.cm-placeholder': {
-        color: isForest ? '#749283' : isDark ? '#6b6860' : '#8a867e',
+        color: isForest ? '#6e7d76' : isDark ? '#6b6860' : '#8a867e',
       },
       '.cm-tooltip': {
         backgroundColor: tooltipBg,
@@ -149,11 +151,11 @@ function buildEditorTheme(theme: ResolvedTheme) {
         color: ink,
       },
       '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-        backgroundColor: isForest ? '#244c3a' : isDark ? '#383632' : '#e7e3d9',
+        backgroundColor: isForest ? '#18221e' : isDark ? '#383632' : '#e7e3d9',
         color: ink,
       },
       '.cm-tooltip-autocomplete .cm-completionDetail': {
-        color: isForest ? '#a4bfb1' : isDark ? '#9b978e' : '#6b6860',
+        color: isForest ? '#7e8b85' : isDark ? '#9b978e' : '#6b6860',
         fontSize: '11px',
         marginLeft: '8px',
       },
@@ -166,10 +168,12 @@ function buildEditorTheme(theme: ResolvedTheme) {
         textUnderlineOffset: '3px',
       },
       '.cm-nexus-tag': {
-        color: isDark ? '#74c69d' : '#2d6a4f',
-        backgroundColor: isDark
-          ? 'rgba(36, 76, 58, 0.55)'
-          : 'rgba(228, 242, 234, 0.9)',
+        color: isForest ? '#8ab8a3' : isDark ? '#74c69d' : '#2d6a4f',
+        backgroundColor: isForest
+          ? 'rgba(138, 184, 163, 0.12)'
+          : isDark
+            ? 'rgba(36, 76, 58, 0.55)'
+            : 'rgba(228, 242, 234, 0.9)',
         borderRadius: '4px',
         padding: '0 4px',
       },
@@ -181,7 +185,7 @@ function buildEditorTheme(theme: ResolvedTheme) {
 function buildHighlightStyle(theme: ResolvedTheme) {
   const isDark = theme !== 'light';
   const isForest = theme === 'forest';
-  const headingInk = isForest ? '#f3f1ec' : isDark ? '#eceae4' : '#1f1e1c';
+  const headingInk = isForest ? '#e4e8e6' : isDark ? '#eceae4' : '#1f1e1c';
   return HighlightStyle.define([
     {
       tag: tags.heading1,
@@ -210,24 +214,24 @@ function buildHighlightStyle(theme: ResolvedTheme) {
       tag: tags.monospace,
       fontFamily: 'var(--font-mono)',
       fontSize: '0.9em',
-      color: isForest ? '#d8f3dc' : isDark ? '#d6d2c8' : '#373734',
+      color: isForest ? '#8ab8a3' : isDark ? '#d6d2c8' : '#373734',
     },
     {
       tag: tags.link,
       color: isDark ? '#d97757' : '#c86445',
       textDecoration: 'underline',
     },
-    { tag: tags.url, color: isForest ? '#a4bfb1' : isDark ? '#9b978e' : '#6b6860' },
+    { tag: tags.url, color: isForest ? '#7e8b85' : isDark ? '#9b978e' : '#6b6860' },
     {
       tag: tags.quote,
-      color: isForest ? '#a4bfb1' : isDark ? '#9b978e' : '#6b6860',
+      color: isForest ? '#7e8b85' : isDark ? '#9b978e' : '#6b6860',
       fontStyle: 'italic',
     },
-    { tag: tags.meta, color: isForest ? '#749283' : isDark ? '#6b6860' : '#8a867e' },
+    { tag: tags.meta, color: isForest ? '#6e7d76' : isDark ? '#6b6860' : '#8a867e' },
     { tag: tags.keyword, color: isDark ? '#d97757' : '#c86445' },
-    { tag: tags.string, color: isDark ? '#74c69d' : '#2d6a4f' },
+    { tag: tags.string, color: isForest ? '#8ab8a3' : isDark ? '#74c69d' : '#2d6a4f' },
     { tag: tags.number, color: isDark ? '#e6a87c' : '#b45309' },
-    { tag: tags.comment, color: isForest ? '#749283' : isDark ? '#6b6860' : '#8a867e' },
+    { tag: tags.comment, color: isForest ? '#6e7d76' : isDark ? '#6b6860' : '#8a867e' },
   ]);
 }
 
