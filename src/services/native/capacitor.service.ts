@@ -6,7 +6,8 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 export const NATIVE_OAUTH_SCHEME = 'com.minh.vault';
 export const NATIVE_OAUTH_HOST = 'login-callback';
 export const NATIVE_OAUTH_REDIRECT_URL = `${NATIVE_OAUTH_SCHEME}://${NATIVE_OAUTH_HOST}`;
-export const VAULT_DARK_BG_HEX = '#141414';
+export const VAULT_DARK_BG_HEX = '#0A0E0C';
+export const NEXUS_STATUS_BAR_HEX = VAULT_DARK_BG_HEX;
 
 export interface ParsedOAuthCallback {
   isOAuthCallback: boolean;
