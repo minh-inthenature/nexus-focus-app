@@ -12,7 +12,9 @@ export type SyncEntityType =
   | 'folder'
   | 'attachment'
   | 'task'
-  | 'calendar_event';
+  | 'calendar_event'
+  | 'habit'
+  | 'habit_log';
 export type SyncOperation = 'create' | 'update' | 'delete';
 export type SyncChangeStatus = 'pending' | 'syncing' | 'synced' | 'failed';
 

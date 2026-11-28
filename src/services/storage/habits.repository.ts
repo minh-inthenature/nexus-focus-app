@@ -1,5 +1,15 @@
 import { getSupabaseClient } from '@/services/auth/supabase.client';
 import {
+  habitLogEntityId,
+  parseHabitLogEntityId,
+} from '@/services/sync/habitKeys';
+import {
+  clearPendingChangesForEntity,
+  enqueueSyncChangeInTx,
+  listActionableChanges,
+  notifySyncQueueMutated,
+} from '@/services/sync/syncQueue';
+import {
   createUuid,
   db,
   type HabitAccentColor,
@@ -8,6 +18,8 @@ import {
   type HabitLogRecord,
   type HabitRecord,
 } from './db';
+
+export { habitLogEntityId, parseHabitLogEntityId };
 
 export interface CreateHabitInput {
   readonly userId?: string;
@@ -109,7 +121,11 @@ export async function createHabit(input: CreateHabitInput): Promise<HabitRecord>
     updatedAt: now,
   };
 
-  await db.habits.add(habit);
+  await db.transaction('rw', [db.habits, db.sync_changes], async () => {
+    await db.habits.add(habit);
+    await enqueueSyncChangeInTx('habit', habit.id, 'create', 0);
+  });
+  notifySyncQueueMutated();
   return habit;
 }
 
@@ -149,15 +165,35 @@ export async function updateHabit(
     updatedAt: new Date().toISOString(),
   };
 
-  await db.habits.put(updated);
+  await db.transaction('rw', [db.habits, db.sync_changes], async () => {
+    await db.habits.put(updated);
+    await enqueueSyncChangeInTx('habit', updated.id, 'update', 0);
+  });
+  notifySyncQueueMutated();
   return updated;
 }
 
 export async function deleteHabit(habitId: string): Promise<void> {
-  await db.transaction('rw', [db.habits, db.habit_logs], async () => {
-    await db.habit_logs.where('habitId').equals(habitId).delete();
-    await db.habits.delete(habitId);
-  });
+  await db.transaction(
+    'rw',
+    [db.habits, db.habit_logs, db.sync_changes],
+    async () => {
+      const logs = await db.habit_logs
+        .where('habitId')
+        .equals(habitId)
+        .toArray();
+      await db.habit_logs.where('habitId').equals(habitId).delete();
+      await db.habits.delete(habitId);
+      for (const log of logs) {
+        await clearPendingChangesForEntity(
+          'habit_log',
+          habitLogEntityId(habitId, log.completedDate),
+        );
+      }
+      await enqueueSyncChangeInTx('habit', habitId, 'delete', 0);
+    },
+  );
+  notifySyncQueueMutated();
 }
 
 export async function toggleHabitLog(
@@ -165,25 +201,36 @@ export async function toggleHabitLog(
   completedDate: string,
   userId = 'local',
 ): Promise<{ completed: boolean; log: HabitLogRecord | null }> {
-  const existing = await db.habit_logs
-    .where('[habitId+completedDate]')
-    .equals([habitId, completedDate])
-    .first();
+  const entityKey = habitLogEntityId(habitId, completedDate);
+  const result = await db.transaction(
+    'rw',
+    [db.habit_logs, db.sync_changes],
+    async () => {
+      const existing = await db.habit_logs
+        .where('[habitId+completedDate]')
+        .equals([habitId, completedDate])
+        .first();
 
-  if (existing) {
-    await db.habit_logs.delete(existing.id);
-    return { completed: false, log: null };
-  }
+      if (existing) {
+        await db.habit_logs.delete(existing.id);
+        await enqueueSyncChangeInTx('habit_log', entityKey, 'delete', 0);
+        return { completed: false, log: null };
+      }
 
-  const created: HabitLogRecord = {
-    id: createUuid(),
-    habitId,
-    userId,
-    completedDate,
-    createdAt: new Date().toISOString(),
-  };
-  await db.habit_logs.add(created);
-  return { completed: true, log: created };
+      const created: HabitLogRecord = {
+        id: createUuid(),
+        habitId,
+        userId,
+        completedDate,
+        createdAt: new Date().toISOString(),
+      };
+      await db.habit_logs.add(created);
+      await enqueueSyncChangeInTx('habit_log', entityKey, 'create', 0);
+      return { completed: true, log: created };
+    },
+  );
+  notifySyncQueueMutated();
+  return result;
 }
 
 export async function pushHabitToSupabase(
@@ -275,12 +322,13 @@ export async function pushHabitLogToggleToSupabase(
 }
 
 /**
- * Pulls remote habits and logs from Supabase and merges them with local IndexedDB,
- * pushing local-only records upward so offline and multi-device check-ins stay in sync.
+ * Pulls remote habits and logs from Supabase and merges them with local IndexedDB.
+ * Local pending/failed mutations in `db.sync_changes` win over remote pulls until flushed;
+ * clean records deleted on another device are removed locally.
  */
-export async function syncHabitsWithSupabase(userId: string): Promise<void> {
+export async function syncHabitsWithSupabase(userId: string): Promise<boolean> {
   const client = getSupabaseClient();
-  if (!client || !userId || userId === 'local') return;
+  if (!client || !userId || userId === 'local') return false;
 
   const [habitsRes, logsRes] = await Promise.all([
     client.from('habits').select('*').eq('user_id', userId),
@@ -289,9 +337,21 @@ export async function syncHabitsWithSupabase(userId: string): Promise<void> {
 
   if (habitsRes.error || logsRes.error) {
     const firstErr = habitsRes.error ?? logsRes.error;
-    if (isMissingHabitTableError(firstErr)) return;
+    if (isMissingHabitTableError(firstErr)) return false;
     throw new Error(firstErr?.message ?? 'Failed to sync habits.');
   }
+
+  const actionable = await listActionableChanges();
+  const pendingHabitIds = new Set(
+    actionable
+      .filter((c) => c.entityType === 'habit')
+      .map((c) => c.entityId),
+  );
+  const pendingLogKeys = new Set(
+    actionable
+      .filter((c) => c.entityType === 'habit_log')
+      .map((c) => c.entityId),
+  );
 
   const remoteHabits: HabitRecord[] = (habitsRes.data ?? []).map((r) => {
     const cat = String(r.category) as HabitCategory;
@@ -324,66 +384,87 @@ export async function syncHabitsWithSupabase(userId: string): Promise<void> {
     createdAt: String(r.created_at),
   }));
 
-  const localHabits = await db.habits.toArray();
+  const [localHabits, localLogs] = await Promise.all([
+    db.habits.toArray(),
+    db.habit_logs.toArray(),
+  ]);
   const localById = new Map(localHabits.map((h) => [h.id, h]));
   const remoteById = new Map(remoteHabits.map((h) => [h.id, h]));
 
   const toPutLocalHabits: HabitRecord[] = [];
-  const toPushRemoteHabits: HabitRecord[] = [];
+  const toDeleteHabitIds: string[] = [];
 
   for (const remote of remoteHabits) {
+    if (pendingHabitIds.has(remote.id)) continue;
     const local = localById.get(remote.id);
-    if (!local || remote.updatedAt >= local.updatedAt) {
+    const differsAtSameTime =
+      local &&
+      remote.updatedAt === local.updatedAt &&
+      (remote.title !== local.title ||
+        remote.category !== local.category ||
+        remote.frequency !== local.frequency ||
+        remote.accentColor !== local.accentColor ||
+        remote.sortOrder !== local.sortOrder ||
+        remote.isArchived !== local.isArchived ||
+        remote.targetDays.join(',') !== local.targetDays.join(','));
+    if (!local || remote.updatedAt > local.updatedAt || differsAtSameTime) {
       toPutLocalHabits.push(remote);
-    } else {
-      toPushRemoteHabits.push(local);
-    }
-  }
-  for (const local of localHabits) {
-    if (!remoteById.has(local.id)) {
-      toPushRemoteHabits.push(local);
     }
   }
 
-  const localLogs = await db.habit_logs.toArray();
+  for (const local of localHabits) {
+    if (!remoteById.has(local.id) && !pendingHabitIds.has(local.id)) {
+      toDeleteHabitIds.push(local.id);
+    }
+  }
+
+  const deletedHabitSet = new Set(toDeleteHabitIds);
   const remoteLogKeys = new Set(
-    remoteLogs.map((l) => `${l.habitId}::${l.completedDate}`),
+    remoteLogs.map((l) => habitLogEntityId(l.habitId, l.completedDate)),
   );
   const localLogKeys = new Set(
-    localLogs.map((l) => `${l.habitId}::${l.completedDate}`),
+    localLogs.map((l) => habitLogEntityId(l.habitId, l.completedDate)),
   );
 
-  const missingLocalLogs = remoteLogs.filter(
-    (l) => !localLogKeys.has(`${l.habitId}::${l.completedDate}`),
-  );
-  const missingRemoteLogs = localLogs.filter(
-    (l) => !remoteLogKeys.has(`${l.habitId}::${l.completedDate}`),
-  );
+  const missingLocalLogs = remoteLogs.filter((l) => {
+    const key = habitLogEntityId(l.habitId, l.completedDate);
+    return (
+      !deletedHabitSet.has(l.habitId) &&
+      !localLogKeys.has(key) &&
+      !pendingLogKeys.has(key)
+    );
+  });
 
-  if (toPutLocalHabits.length > 0 || missingLocalLogs.length > 0) {
+  const toDeleteLogIds = localLogs
+    .filter((l) => {
+      if (deletedHabitSet.has(l.habitId)) return true;
+      const key = habitLogEntityId(l.habitId, l.completedDate);
+      return !remoteLogKeys.has(key) && !pendingLogKeys.has(key);
+    })
+    .map((l) => l.id);
+
+  const changed =
+    toPutLocalHabits.length > 0 ||
+    toDeleteHabitIds.length > 0 ||
+    missingLocalLogs.length > 0 ||
+    toDeleteLogIds.length > 0;
+
+  if (changed) {
     await db.transaction('rw', [db.habits, db.habit_logs], async () => {
       if (toPutLocalHabits.length > 0) {
         await db.habits.bulkPut(toPutLocalHabits);
       }
+      if (toDeleteHabitIds.length > 0) {
+        await db.habits.bulkDelete(toDeleteHabitIds);
+      }
       if (missingLocalLogs.length > 0) {
         await db.habit_logs.bulkPut(missingLocalLogs);
+      }
+      if (toDeleteLogIds.length > 0) {
+        await db.habit_logs.bulkDelete(toDeleteLogIds);
       }
     });
   }
 
-  for (const habit of toPushRemoteHabits) {
-    await pushHabitToSupabase(habit, userId);
-  }
-  if (missingRemoteLogs.length > 0) {
-    await client.from('habit_logs').upsert(
-      missingRemoteLogs.map((l) => ({
-        id: l.id,
-        habit_id: l.habitId,
-        user_id: userId,
-        completed_date: l.completedDate,
-        created_at: l.createdAt,
-      })),
-      { onConflict: 'habit_id,completed_date' },
-    );
-  }
+  return changed;
 }

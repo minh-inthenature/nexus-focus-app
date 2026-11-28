@@ -6,7 +6,7 @@ import type {
 
 export type EventColorKey = EventColor | 'default' | 'emerald';
 
-export const DEFAULT_EVENT_COLOR: EventColor = 'blue';
+export const DEFAULT_EVENT_COLOR: EventColor = 'sage';
 
 export interface CategoryMeta {
   readonly id: EventCategory;
@@ -15,9 +15,9 @@ export interface CategoryMeta {
 }
 
 export const EVENT_CATEGORIES: readonly CategoryMeta[] = [
-  { id: 'personal', label: 'Personal', defaultColor: 'blue' },
+  { id: 'personal', label: 'Personal', defaultColor: 'sage' },
   { id: 'work', label: 'Work', defaultColor: 'violet' },
-  { id: 'study', label: 'Study', defaultColor: 'sage' },
+  { id: 'study', label: 'Study', defaultColor: 'blue' },
   { id: 'meeting', label: 'Meeting', defaultColor: 'amber' },
   { id: 'other', label: 'Other', defaultColor: 'rose' },
 ];
@@ -40,58 +40,67 @@ export interface EventColorOption {
 
 export const EVENT_COLOR_OPTIONS: readonly EventColorOption[] = [
   {
-    id: 'blue',
-    label: 'Ocean Blue',
-    swatchClass: 'bg-sky-400',
+    id: 'sage',
+    label: 'Muted Sage',
+    swatchClass: 'bg-[#6E9E88]',
     surfaceClass:
-      'border-sky-400/35 bg-sky-500/15 text-sky-950 dark:text-sky-100',
+      'border-[rgba(110,158,136,0.28)] bg-[rgba(110,158,136,0.12)] text-emerald-950 dark:text-[#9EC4B3]',
     badgeClass:
-      'border-sky-400/40 bg-sky-500/20 text-sky-800 dark:text-sky-200',
+      'border-[rgba(110,158,136,0.28)] bg-[rgba(110,158,136,0.12)] text-emerald-900 dark:text-[#9EC4B3]',
   },
   {
-    id: 'sage',
-    label: 'Sage Green',
-    swatchClass: 'bg-emerald-400',
+    id: 'terracotta',
+    label: 'Warm Terracotta',
+    swatchClass: 'bg-[#D4846A]',
     surfaceClass:
-      'border-emerald-400/35 bg-emerald-500/15 text-emerald-950 dark:text-emerald-100',
+      'border-[rgba(212,132,106,0.28)] bg-[rgba(212,132,106,0.12)] text-orange-950 dark:text-[#E3A995]',
     badgeClass:
-      'border-emerald-400/40 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200',
+      'border-[rgba(212,132,106,0.28)] bg-[rgba(212,132,106,0.12)] text-orange-900 dark:text-[#E3A995]',
+  },
+  {
+    id: 'blue',
+    label: 'Muted Steel Blue',
+    swatchClass: 'bg-[#6B8CAE]',
+    surfaceClass:
+      'border-[rgba(107,140,174,0.28)] bg-[rgba(107,140,174,0.12)] text-sky-950 dark:text-[#A1BDD9]',
+    badgeClass:
+      'border-[rgba(107,140,174,0.28)] bg-[rgba(107,140,174,0.12)] text-sky-900 dark:text-[#A1BDD9]',
   },
   {
     id: 'amber',
-    label: 'Warm Amber',
-    swatchClass: 'bg-amber-400',
+    label: 'Soft Amber',
+    swatchClass: 'bg-[#C9A25E]',
     surfaceClass:
-      'border-amber-400/35 bg-amber-500/15 text-amber-950 dark:text-amber-100',
+      'border-[rgba(201,162,94,0.28)] bg-[rgba(201,162,94,0.12)] text-amber-950 dark:text-[#DEC08A]',
     badgeClass:
-      'border-amber-400/40 bg-amber-500/20 text-amber-800 dark:text-amber-200',
+      'border-[rgba(201,162,94,0.28)] bg-[rgba(201,162,94,0.12)] text-amber-900 dark:text-[#DEC08A]',
   },
   {
     id: 'rose',
-    label: 'Muted Rose',
-    swatchClass: 'bg-rose-400',
+    label: 'Dusty Rose',
+    swatchClass: 'bg-[#B87A88]',
     surfaceClass:
-      'border-rose-400/35 bg-rose-500/15 text-rose-950 dark:text-rose-100',
+      'border-[rgba(184,122,136,0.28)] bg-[rgba(184,122,136,0.12)] text-rose-950 dark:text-[#D6A5B0]',
     badgeClass:
-      'border-rose-400/40 bg-rose-500/20 text-rose-800 dark:text-rose-200',
+      'border-[rgba(184,122,136,0.28)] bg-[rgba(184,122,136,0.12)] text-rose-900 dark:text-[#D6A5B0]',
   },
   {
     id: 'violet',
-    label: 'Soft Violet',
-    swatchClass: 'bg-violet-400',
+    label: 'Soft Lavender',
+    swatchClass: 'bg-[#9684B0]',
     surfaceClass:
-      'border-violet-400/35 bg-violet-500/15 text-violet-950 dark:text-violet-100',
+      'border-[rgba(150,132,176,0.28)] bg-[rgba(150,132,176,0.12)] text-violet-950 dark:text-[#BCAECF]',
     badgeClass:
-      'border-violet-400/40 bg-violet-500/20 text-violet-800 dark:text-violet-200',
+      'border-[rgba(150,132,176,0.28)] bg-[rgba(150,132,176,0.12)] text-violet-900 dark:text-[#BCAECF]',
   },
   {
     id: 'slate',
     label: 'Neutral Slate',
-    swatchClass: 'bg-slate-400',
+    swatchClass: 'bg-[#7E8B85]',
     surfaceClass:
-      'border-slate-400/35 bg-slate-500/15 text-slate-900 dark:text-slate-100',
+      'border-[rgba(126,139,133,0.28)] bg-[rgba(126,139,133,0.12)] text-slate-900 dark:text-[#AEB9B4]',
     badgeClass:
-      'border-slate-400/40 bg-slate-500/20 text-slate-700 dark:text-slate-200',
+      'border-[rgba(126,139,133,0.28)] bg-[rgba(126,139,133,0.12)] text-slate-700 dark:text-[#AEB9B4]',
   },
 ];
 

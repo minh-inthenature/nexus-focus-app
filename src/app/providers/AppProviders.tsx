@@ -68,7 +68,7 @@ function AuthAndDriveBoot({ children }: { children: ReactNode }) {
           useNotesStore.getState().refreshVault(),
           useTasksStore.getState().refreshTasks(),
           useCalendarStore.getState().refreshEvents(),
-          useHabitsStore.getState().syncWithCloud(),
+          useHabitsStore.getState().refreshHabits(),
         ]);
       },
     });
@@ -86,7 +86,6 @@ function AuthAndDriveBoot({ children }: { children: ReactNode }) {
     if (userId) {
       void refreshDriveStatus(userId);
       void refreshCalendarStatus();
-      void useHabitsStore.getState().syncWithCloud();
     } else {
       resetDrive();
       resetCalendar();

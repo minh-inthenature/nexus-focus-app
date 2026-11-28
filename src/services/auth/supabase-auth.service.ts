@@ -74,12 +74,27 @@ export class SupabaseAuthService implements AuthService {
 
     const mapped = mapSession(data.session);
     if (!mapped) {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        throw new Error('Offline: unable to refresh authentication session.');
+      }
       // Attempt silent refresh for expired access tokens
       const { data: refreshed, error: refreshErr } =
         await client.auth.refreshSession();
       if (refreshErr || !refreshed.session) {
-        await client.auth.signOut({ scope: 'local' });
-        return null;
+        const errStatus = (refreshErr as { status?: number } | null)?.status;
+        const errMsg = refreshErr?.message ?? '';
+        const isConfirmedInvalidGrant =
+          errStatus === 400 ||
+          errStatus === 401 ||
+          errStatus === 403 ||
+          /invalid_grant|refresh_token_not_found|invalid refresh token/i.test(
+            errMsg,
+          );
+        if (isConfirmedInvalidGrant || (!refreshErr && !refreshed.session)) {
+          await client.auth.signOut({ scope: 'local' });
+          return null;
+        }
+        throw new Error(errMsg || 'Unable to refresh authentication session.');
       }
       return mapSession(refreshed.session);
     }

@@ -115,7 +115,8 @@ export type EventColor =
   | 'amber'
   | 'rose'
   | 'violet'
-  | 'slate';
+  | 'slate'
+  | 'terracotta';
 
 export interface CalendarEventRecord {
   readonly id: EntityId;

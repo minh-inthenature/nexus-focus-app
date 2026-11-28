@@ -10,7 +10,12 @@ import {
   Settings,
 } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import {
+  getSyncBadge,
+  SYNC_BADGE_DOT_CLASS,
+} from '@/components/navigation/syncBadge';
 import { useNotesStore } from '@/features/notes/stores/useNotesStore';
+import { useAuthStore } from '@/stores/useAuthStore';
 import { useSyncStore } from '@/stores/useSyncStore';
 import { cn } from '@/utils/cn';
 import { MobileHabitsView } from './MobileHabitsView';
@@ -42,6 +47,8 @@ export function MobileAppShell() {
   const setSearchQuery = useNotesStore((s) => s.setSearchQuery);
   const syncStatus = useSyncStore((s) => s.status);
   const syncNow = useSyncStore((s) => s.syncNow);
+  const isConnected = useAuthStore((s) => s.status === 'authenticated');
+  const syncBadge = getSyncBadge(syncStatus, isConnected);
 
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [captureOpen, setCaptureOpen] = useState(false);
@@ -97,6 +104,20 @@ export function MobileAppShell() {
           )}
 
           <div className="flex items-center gap-1">
+            <span
+              role="status"
+              aria-label={`Sync status: ${syncBadge.label}`}
+              className="mr-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-[#7E8B85] tabular-nums"
+            >
+              <span
+                className={cn(
+                  'h-1.5 w-1.5 rounded-full',
+                  SYNC_BADGE_DOT_CLASS[syncBadge.tone],
+                )}
+                aria-hidden="true"
+              />
+              <span>{syncBadge.label}</span>
+            </span>
             <button
               type="button"
               onClick={() => void syncNow('manual')}

@@ -72,7 +72,7 @@ export function UpcomingEventsWidget({
                     <span className="truncate text-sm font-medium text-foreground">
                       {ev.title}
                     </span>
-                    <span className="shrink-0 rounded-lg border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    <span className="shrink-0 rounded-lg border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#8E9B95] [.forest_&]:border-white/[0.08] [.forest_&]:bg-white/[0.04] [.forest_&]:text-[#8E9B95]">
                       {CATEGORY_LABELS[ev.category]}
                     </span>
                   </div>

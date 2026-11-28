@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   Check,
-  Cloud,
   HardDrive,
   RefreshCw,
   WifiOff,
@@ -14,10 +13,23 @@ import {
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useSyncStore } from '@/stores/useSyncStore';
 import { cn } from '@/utils/cn';
+import {
+  getSyncBadge,
+  SYNC_BADGE_DOT_CLASS,
+  type SyncBadgeTone,
+} from './syncBadge';
 
 export interface SyncStatusWidgetProps {
   collapsed: boolean;
 }
+
+const TONE_ICONS: Record<SyncBadgeTone, typeof Check> = {
+  synced: Check,
+  syncing: RefreshCw,
+  offline: WifiOff,
+  error: AlertTriangle,
+  local: HardDrive,
+};
 
 /**
  * Compact footer indicator showing hybrid sync state, offline status,
@@ -34,41 +46,10 @@ export function SyncStatusWidget({ collapsed }: SyncStatusWidgetProps) {
   const authStatus = useAuthStore((state) => state.status);
 
   const isConnected = authStatus === 'authenticated';
-  const totalPending = status.pendingCount + status.failedCount;
-
-  let label = 'Local mode';
-  let Icon = HardDrive;
-  let dotClass = 'bg-muted-foreground/50';
-
-  if (!status.isOnline || status.state === 'offline') {
-    Icon = WifiOff;
-    label = totalPending > 0 ? `Offline · ${totalPending} pending` : 'Offline';
-    dotClass = 'bg-destructive';
-  } else if (status.state === 'syncing') {
-    Icon = RefreshCw;
-    label = 'Syncing…';
-    dotClass = 'bg-foreground';
-  } else if (status.conflictCount > 0) {
-    Icon = AlertTriangle;
-    label = `${status.conflictCount} conflict(s)`;
-    dotClass = 'bg-amber-500';
-  } else if (status.failedCount > 0 || status.state === 'error') {
-    Icon = AlertTriangle;
-    label = `${status.failedCount} failed`;
-    dotClass = 'bg-destructive';
-  } else if (!isConnected) {
-    Icon = HardDrive;
-    label = totalPending > 0 ? `${totalPending} queued` : 'Local mode';
-    dotClass = totalPending > 0 ? 'bg-amber-500/80' : 'bg-muted-foreground/50';
-  } else if (totalPending > 0) {
-    Icon = Cloud;
-    label = `${totalPending} pending`;
-    dotClass = 'bg-amber-500';
-  } else {
-    Icon = Check;
-    label = 'Synced';
-    dotClass = 'bg-focus-accent';
-  }
+  const badge = getSyncBadge(status, isConnected);
+  const label = badge.label;
+  const dotClass = SYNC_BADGE_DOT_CLASS[badge.tone];
+  const Icon = TONE_ICONS[badge.tone];
 
   const handlePrimaryClick = () => {
     if (status.conflictCount > 0) {
@@ -132,17 +113,10 @@ export function SyncStatusWidget({ collapsed }: SyncStatusWidgetProps) {
             'hover:text-foreground cursor-pointer',
         )}
       >
-        {status.state === 'syncing' ? (
-          <RefreshCw
-            className="h-3 w-3 shrink-0 animate-spin text-foreground"
-            aria-hidden="true"
-          />
-        ) : (
-          <span
-            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dotClass)}
-            aria-hidden="true"
-          />
-        )}
+        <span
+          className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dotClass)}
+          aria-hidden="true"
+        />
         <span className="truncate tabular-nums">{label}</span>
       </button>
 

@@ -82,12 +82,7 @@ export function TodayScheduleWidget({
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      <span
-                        className={cn(
-                          'rounded-lg border px-1.5 py-0.5 text-[10px] font-medium',
-                          accent.badgeClass,
-                        )}
-                      >
+                      <span className="rounded-lg border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#8E9B95] [.forest_&]:border-white/[0.08] [.forest_&]:bg-white/[0.04] [.forest_&]:text-[#8E9B95]">
                         {CATEGORY_LABELS[ev.category]}
                       </span>
                       <span className="text-[11px] tabular-nums text-muted-foreground">

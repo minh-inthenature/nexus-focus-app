@@ -46,6 +46,7 @@ import {
   upsertTaskRowToSupabase,
 } from './conflictResolver';
 import { buildSyncPlan } from './syncPlanner';
+import { runHabitsSyncPhase } from './habitsSync';
 import {
   listActionableChanges,
   markChangeFailed,
@@ -979,6 +980,15 @@ export async function executeSyncCycle(
         };
       }
     }
+  }
+
+  try {
+    const habitsResult = await runHabitsSyncPhase(userId);
+    if (habitsResult.appliedRemoteChanges) appliedRemoteChanges = true;
+    syncedCount += habitsResult.syncedCount;
+    errorCount += habitsResult.errorCount;
+  } catch {
+    errorCount += 1;
   }
 
   await purgeSyncedChanges();

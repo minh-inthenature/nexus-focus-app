@@ -199,8 +199,9 @@ describe('Calendar date/timezone, layout, and filter utilities', () => {
 
   it('resolves dark-mode event color palette options and calculates local time grid positions', () => {
     expect(EVENT_COLOR_OPTIONS.map((o) => o.id)).toEqual([
-      'blue',
       'sage',
+      'terracotta',
+      'blue',
       'amber',
       'rose',
       'violet',
@@ -209,13 +210,17 @@ describe('Calendar date/timezone, layout, and filter utilities', () => {
 
     expect(resolveEventColor('personal', 'sage')).toBe('sage');
     expect(resolveEventColor('personal', 'emerald')).toBe('sage');
+    expect(resolveEventColor('personal', undefined)).toBe('sage');
     expect(resolveEventColor('personal', 'slate')).toBe('slate');
-    expect(resolveEventColor('study', undefined)).toBe('sage');
+    expect(resolveEventColor('study', undefined)).toBe('blue');
+    expect(getEventAccentClasses('personal', undefined).swatchClass).toBe(
+      'bg-[#6E9E88]',
+    );
     expect(getEventAccentClasses('personal', 'amber').surfaceClass).toContain(
-      'bg-amber-500/15',
+      'bg-[rgba(201,162,94,0.12)]',
     );
     expect(getEventAccentClasses('personal', 'slate').surfaceClass).toContain(
-      'bg-slate-500/15',
+      'bg-[rgba(126,139,133,0.12)]',
     );
 
     const morningPos = getLocalTimePosition(new Date(2026, 10, 27, 10, 30, 0));

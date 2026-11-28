@@ -2,12 +2,8 @@ import { create } from 'zustand';
 import {
   createHabit as repoCreateHabit,
   deleteHabit as repoDeleteHabit,
-  deleteHabitFromSupabase,
   listHabitLogs,
   listHabits,
-  pushHabitLogToggleToSupabase,
-  pushHabitToSupabase,
-  syncHabitsWithSupabase,
   toggleHabitLog as repoToggleHabitLog,
   updateHabit as repoUpdateHabit,
   type CreateHabitInput,
@@ -15,6 +11,7 @@ import {
   type HabitRecord,
   type UpdateHabitPatch,
 } from '@/services';
+import { syncEngine } from '@/services/sync/syncEngine';
 import { useAuthStore } from '@/stores/useAuthStore';
 
 interface HabitsStoreState {
@@ -65,10 +62,6 @@ export const useHabitsStore = create<HabitsStoreState>((set, get) => ({
       try {
         await get().refreshHabits();
         set({ initialized: true, loading: false, error: null });
-        const userId = useAuthStore.getState().session?.user.id;
-        if (userId) {
-          void get().syncWithCloud();
-        }
       } catch (err) {
         set({
           loading: false,
@@ -95,7 +88,7 @@ export const useHabitsStore = create<HabitsStoreState>((set, get) => ({
     if (!userId) return;
     set({ syncing: true });
     try {
-      await syncHabitsWithSupabase(userId);
+      await syncEngine.triggerSync('manual');
       await get().refreshHabits();
     } catch (err) {
       set({
@@ -118,19 +111,12 @@ export const useHabitsStore = create<HabitsStoreState>((set, get) => ({
     const userId = useAuthStore.getState().session?.user.id ?? 'local';
     const created = await repoCreateHabit({ ...input, userId });
     await get().refreshHabits();
-    if (userId !== 'local') {
-      void pushHabitToSupabase(created, userId).catch(() => undefined);
-    }
     return created;
   },
 
   updateHabit: async (habitId, patch) => {
     const updated = await repoUpdateHabit(habitId, patch);
     await get().refreshHabits();
-    const userId = useAuthStore.getState().session?.user.id;
-    if (userId) {
-      void pushHabitToSupabase(updated, userId).catch(() => undefined);
-    }
     return updated;
   },
 
@@ -143,10 +129,6 @@ export const useHabitsStore = create<HabitsStoreState>((set, get) => ({
   deleteHabit: async (habitId) => {
     await repoDeleteHabit(habitId);
     await get().refreshHabits();
-    const userId = useAuthStore.getState().session?.user.id;
-    if (userId) {
-      void deleteHabitFromSupabase(habitId, userId).catch(() => undefined);
-    }
   },
 
   toggleCompletion: async (habitId, dateKey) => {
@@ -174,19 +156,8 @@ export const useHabitsStore = create<HabitsStoreState>((set, get) => ({
     }
 
     try {
-      const result = await repoToggleHabitLog(habitId, dateKey, userId);
+      await repoToggleHabitLog(habitId, dateKey, userId);
       await get().refreshHabits();
-      if (userId !== 'local') {
-        const habit = get().habits.find((h) => h.id === habitId);
-        void pushHabitLogToggleToSupabase(
-          habit,
-          habitId,
-          dateKey,
-          result.completed,
-          result.log,
-          userId,
-        ).catch(() => undefined);
-      }
     } catch (err) {
       set({
         logs: previousLogs,
