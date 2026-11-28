@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
-import { FileText, Search, Star, X } from 'lucide-react';
+import { AlignLeft, FileText, Search, Star, X } from 'lucide-react';
 import { useNotesStore } from '@/features/notes/stores/useNotesStore';
+import { isTextNote } from '@/features/notes/utils/textNote';
 import type { NoteRecord } from '@/services';
 import { cn } from '@/utils/cn';
 
@@ -85,6 +86,7 @@ export function MobileNotesView({ onOpenNote }: MobileNotesViewProps) {
 
   const renderNoteRow = (note: NoteRecord) => {
     const folderLabel = note.folderId ? folderNameMap.get(note.folderId) : null;
+    const isText = isTextNote(note);
     return (
       <div
         key={note.id}
@@ -99,12 +101,23 @@ export function MobileNotesView({ onOpenNote }: MobileNotesViewProps) {
         }}
         className="flex items-start gap-2.5 rounded-xl border border-[#1E2623] bg-[#111614] px-3.5 py-3 active:bg-[#18221E] transition-colors cursor-pointer"
       >
-        <FileText className="h-4 w-4 mt-0.5 shrink-0 text-[#6E7D76]" />
+        {isText ? (
+          <AlignLeft className="h-4 w-4 mt-0.5 shrink-0 text-[#8AB8A3]" />
+        ) : (
+          <FileText className="h-4 w-4 mt-0.5 shrink-0 text-[#6E7D76]" />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium text-[#E4E8E6] truncate">
-              {note.title || 'Untitled note'}
-            </p>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <p className="text-sm font-medium text-[#E4E8E6] truncate">
+                {note.title || 'Untitled note'}
+              </p>
+              {isText && (
+                <span className="shrink-0 rounded border border-[#1E2623] bg-[#161D1A] px-1 py-0.5 font-mono text-[9px] text-[#7E8B85]">
+                  TXT
+                </span>
+              )}
+            </div>
             <span className="text-[11px] text-[#7E8B85] shrink-0">
               {formatUpdatedLabel(note.updatedAt)}
             </span>

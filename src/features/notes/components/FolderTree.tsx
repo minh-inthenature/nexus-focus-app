@@ -1,5 +1,6 @@
-import { useState, type DragEvent, type KeyboardEvent } from 'react';
+import { memo, useState, type DragEvent, type KeyboardEvent } from 'react';
 import {
+  AlignLeft,
   Calendar,
   ChevronDown,
   ChevronRight,
@@ -20,6 +21,7 @@ import {
   getNoteLanguage,
   isCodeNote,
 } from '@/features/notes/utils/codeNote';
+import { isTextNote } from '@/features/notes/utils/textNote';
 import type { FolderRecord, NoteRecord } from '@/services';
 import { cn } from '@/utils/cn';
 
@@ -72,7 +74,7 @@ export function sortTreeNotes(notes: readonly NoteRecord[]): NoteRecord[] {
  * Recursive Obsidian-inspired folder and note tree supporting nested folders,
  * alphabetical sorting, inline rename, drag-and-drop moves, and UUID identity.
  */
-export function FolderTree({
+export const FolderTree = memo(function FolderTree({
   folders,
   notes,
   activeNoteId,
@@ -136,6 +138,7 @@ export function FolderTree({
     const isRenaming =
       editing?.kind === 'rename-note' && editing.id === note.id;
     const isCanvas = isCanvasNote(note);
+    const isText = isTextNote(note);
     const codeMeta = isCodeNote(note)
       ? getCodeLanguageMeta(getNoteLanguage(note))
       : null;
@@ -206,6 +209,16 @@ export function FolderTree({
                   )}
                   aria-hidden="true"
                 />
+              ) : isText ? (
+                <AlignLeft
+                  className={cn(
+                    'h-3.5 w-3.5 shrink-0 text-muted-foreground',
+                    isActive
+                      ? '[.forest_&]:text-[#8AB8A3]'
+                      : '[.forest_&]:text-[#6E7D76]',
+                  )}
+                  aria-hidden="true"
+                />
               ) : (
                 <FileText
                   className={cn(
@@ -225,6 +238,10 @@ export function FolderTree({
               ) : codeMeta ? (
                 <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 py-0 font-mono text-[9px] leading-tight text-muted-foreground">
                   {codeMeta.badge}
+                </span>
+              ) : isText ? (
+                <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 py-0 font-mono text-[9px] leading-tight text-muted-foreground">
+                  TXT
                 </span>
               ) : null}
             </button>
@@ -474,4 +491,4 @@ export function FolderTree({
       )}
     </div>
   );
-}
+});

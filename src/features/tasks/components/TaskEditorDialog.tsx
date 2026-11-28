@@ -1,10 +1,13 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
+  CalendarClock,
+  Clock,
   ExternalLink,
   FileText,
   FolderKanban,
   Inbox,
   Plus,
+  Star,
   Trash2,
   X,
 } from 'lucide-react';
@@ -17,6 +20,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  extendTaskDeadline,
+  formatDurationLabel,
   getOffsetDateString,
   getTodayDateString,
   normalizeTaskTags,
@@ -47,9 +52,12 @@ export interface TaskEditorDialogProps {
     priority: TaskPriority;
     startDate: string;
     dueDate: string;
+    dueTime: string;
+    durationMinutes: number | null;
     category: string;
     group: string;
     isBacklog: boolean;
+    isStarred: boolean;
     tags: string[];
     linkedNoteIds: string[];
   }) => Promise<void>;
@@ -81,9 +89,13 @@ export function TaskEditorDialog({
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
+  const [dueTime, setDueTime] = useState('');
+  const [durationHours, setDurationHours] = useState('0');
+  const [durationMins, setDurationMins] = useState('0');
   const [category, setCategory] = useState('');
   const [group, setGroup] = useState('');
   const [isBacklog, setIsBacklog] = useState(false);
+  const [isStarred, setIsStarred] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState('');
   const [linkedNoteIds, setLinkedNoteIds] = useState<string[]>([]);
@@ -106,12 +118,17 @@ export function TaskEditorDialog({
       setPriority(task.priority);
       setStartDate(task.startDate ?? '');
       setDueDate(task.dueDate ?? '');
+      setDueTime(task.dueTime ?? '');
+      const mins = task.durationMinutes ?? 0;
+      setDurationHours(String(Math.floor(mins / 60)));
+      setDurationMins(String(mins % 60));
       setCategory(task.category ?? '');
       setGroup(task.group ?? '');
       setIsBacklog(
         task.status !== 'done' &&
           (Boolean(task.isBacklog) || (!task.dueDate && task.isBacklog !== false)),
       );
+      setIsStarred(Boolean(task.isStarred));
       setTags([...task.tags]);
       setLinkedNoteIds([...task.linkedNoteIds]);
     } else {
@@ -121,9 +138,13 @@ export function TaskEditorDialog({
       setPriority('medium');
       setStartDate('');
       setDueDate(prefillDueDate);
+      setDueTime('');
+      setDurationHours('0');
+      setDurationMins('0');
       setCategory('');
       setGroup(prefillGroup ?? '');
       setIsBacklog(prefillBacklog || !prefillDueDate);
+      setIsStarred(false);
       setTags([]);
       setLinkedNoteIds([...prefillLinkedNoteIds]);
     }
@@ -172,6 +193,28 @@ export function TaskEditorDialog({
     setNotePickerId('');
   };
 
+  const totalDurationMinutes =
+    Math.max(0, Number.parseInt(durationHours || '0', 10) || 0) * 60 +
+    Math.max(0, Number.parseInt(durationMins || '0', 10) || 0);
+  const formattedDuration = formatDurationLabel(totalDurationMinutes);
+
+  const applyDurationPreset = (minutes: number) => {
+    setDurationHours(String(Math.floor(minutes / 60)));
+    setDurationMins(String(minutes % 60));
+  };
+
+  const handleExtendDeadline = () => {
+    if (totalDurationMinutes <= 0) return;
+    const next = extendTaskDeadline(
+      isBacklog ? undefined : dueDate || undefined,
+      dueTime || undefined,
+      totalDurationMinutes,
+    );
+    setDueDate(next.dueDate);
+    setDueTime(next.dueTime);
+    setIsBacklog(false);
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const trimmedTitle = title.trim();
@@ -203,9 +246,12 @@ export function TaskEditorDialog({
         priority,
         startDate,
         dueDate: isBacklog ? '' : dueDate,
+        dueTime: isBacklog ? '' : dueTime,
+        durationMinutes: totalDurationMinutes > 0 ? totalDurationMinutes : null,
         category,
         group,
         isBacklog,
+        isStarred,
         tags: finalTags,
         linkedNoteIds,
       });
@@ -234,9 +280,32 @@ export function TaskEditorDialog({
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="top-[6%] flex max-h-[88vh] max-w-lg flex-col overflow-hidden p-0">
         <div className="shrink-0 px-5 pt-5 pb-3">
-          <DialogTitle className="text-sm font-semibold text-foreground">
-            {task ? 'Edit Task' : 'New Task'}
-          </DialogTitle>
+          <div className="flex items-center justify-between gap-2 pr-6">
+            <DialogTitle className="text-sm font-semibold text-foreground">
+              {task ? 'Edit Task' : 'New Task'}
+            </DialogTitle>
+            <button
+              type="button"
+              onClick={() => setIsStarred((prev) => !prev)}
+              aria-pressed={isStarred}
+              aria-label="Pin task to top"
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors cursor-pointer',
+                isStarred
+                  ? 'border-amber-500/50 bg-amber-500/15 text-amber-400'
+                  : 'border-border bg-background text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Star
+                className={cn(
+                  'h-3 w-3',
+                  isStarred && 'fill-amber-400 text-amber-400',
+                )}
+                aria-hidden="true"
+              />
+              <span>{isStarred ? 'Pinned' : 'Pin to Top'}</span>
+            </button>
+          </div>
           <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
             {task
               ? 'Update task details, dates, tags, or linked Markdown notes.'
@@ -421,6 +490,7 @@ export function TaskEditorDialog({
                     setIsBacklog(next);
                     if (next) {
                       setDueDate('');
+                      setDueTime('');
                     }
                   }}
                   aria-pressed={isBacklog}
@@ -435,6 +505,113 @@ export function TaskEditorDialog({
                   <span>Backlog</span>
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 rounded-md border border-border bg-background/50 p-2.5">
+            <div className="space-y-1">
+              <label
+                htmlFor="task-due-time"
+                className="text-[11px] font-medium text-muted-foreground"
+              >
+                Due time
+              </label>
+              <input
+                id="task-due-time"
+                type="time"
+                value={dueTime}
+                onChange={(e) => setDueTime(e.target.value)}
+                className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="task-duration-hrs"
+                className="text-[11px] font-medium text-muted-foreground"
+              >
+                Duration (hrs)
+              </label>
+              <input
+                id="task-duration-hrs"
+                type="number"
+                min={0}
+                max={99}
+                value={durationHours}
+                onChange={(e) => setDurationHours(e.target.value)}
+                className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring tabular-nums"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="task-duration-min"
+                className="text-[11px] font-medium text-muted-foreground"
+              >
+                Duration (min)
+              </label>
+              <input
+                id="task-duration-min"
+                type="number"
+                min={0}
+                max={59}
+                value={durationMins}
+                onChange={(e) => setDurationMins(e.target.value)}
+                className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring tabular-nums"
+              />
+            </div>
+
+            <div className="col-span-3 flex flex-wrap items-center justify-between gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-1">
+                <Clock className="mr-0.5 h-3 w-3 text-muted-foreground" aria-hidden="true" />
+                {[
+                  { label: '30m', minutes: 30 },
+                  { label: '1h', minutes: 60 },
+                  { label: '1h 30m', minutes: 90 },
+                  { label: '2h', minutes: 120 },
+                ].map((preset) => {
+                  const active = totalDurationMinutes === preset.minutes;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => applyDurationPreset(preset.minutes)}
+                      aria-pressed={active}
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer',
+                        active
+                          ? 'border-primary bg-primary/15 text-primary'
+                          : 'border-border bg-background text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+                {formattedDuration ? (
+                  <button
+                    type="button"
+                    onClick={() => applyDurationPreset(0)}
+                    className="ml-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+
+              <button
+                type="button"
+                disabled={totalDurationMinutes <= 0}
+                onClick={handleExtendDeadline}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-40 cursor-pointer"
+              >
+                <CalendarClock className="h-3 w-3" aria-hidden="true" />
+                <span>
+                  {formattedDuration
+                    ? `Extend Deadline (+${formattedDuration})`
+                    : 'Extend Deadline'}
+                </span>
+              </button>
             </div>
           </div>
 

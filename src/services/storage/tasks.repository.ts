@@ -22,10 +22,13 @@ export interface CreateTaskInput {
   readonly priority?: TaskPriority;
   readonly startDate?: string;
   readonly dueDate?: string;
+  readonly dueTime?: string;
+  readonly durationMinutes?: number;
   readonly tags?: readonly string[];
   readonly category?: string;
   readonly group?: string;
   readonly isBacklog?: boolean;
+  readonly isStarred?: boolean;
   readonly linkedNoteIds?: readonly string[];
 }
 
@@ -36,11 +39,28 @@ export interface UpdateTaskPatch {
   readonly priority?: TaskPriority;
   readonly startDate?: string | null;
   readonly dueDate?: string | null;
+  readonly dueTime?: string | null;
+  readonly durationMinutes?: number | null;
   readonly tags?: readonly string[];
   readonly category?: string | null;
   readonly group?: string | null;
   readonly isBacklog?: boolean;
+  readonly isStarred?: boolean;
   readonly linkedNoteIds?: readonly string[];
+}
+
+function normalizeDurationMinutes(value: number | null | undefined): number | undefined {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const rounded = Math.round(value);
+  return rounded > 0 ? rounded : undefined;
+}
+
+function normalizeDueTime(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return /^\d{2}:\d{2}$/.test(trimmed) ? trimmed : undefined;
 }
 
 function dedupeIds(ids: readonly string[] | undefined): string[] {
@@ -90,6 +110,8 @@ export async function createTask(input: CreateTaskInput): Promise<TaskRecord> {
 
   const startDate = input.startDate?.trim() || undefined;
   const dueDate = input.dueDate?.trim() || undefined;
+  const dueTime = normalizeDueTime(input.dueTime);
+  const durationMinutes = normalizeDurationMinutes(input.durationMinutes);
   const dateError = validateTaskDates(startDate, dueDate);
   if (dateError) {
     throw new Error(dateError);
@@ -102,6 +124,7 @@ export async function createTask(input: CreateTaskInput): Promise<TaskRecord> {
   const group = input.group?.trim() || undefined;
   const isBacklog =
     input.isBacklog !== undefined ? Boolean(input.isBacklog) : !dueDate;
+  const isStarred = Boolean(input.isStarred);
 
   const task: TaskRecord = {
     id: createUuid(),
@@ -112,10 +135,13 @@ export async function createTask(input: CreateTaskInput): Promise<TaskRecord> {
     priority: input.priority ?? 'medium',
     ...(startDate ? { startDate } : {}),
     ...(dueDate ? { dueDate } : {}),
+    ...(dueTime ? { dueTime } : {}),
+    ...(durationMinutes !== undefined ? { durationMinutes } : {}),
     tags: normalizeTaskTags(input.tags ?? []),
     ...(category ? { category } : {}),
     ...(group ? { group } : {}),
     ...(isBacklog ? { isBacklog: true } : { isBacklog: false }),
+    ...(isStarred ? { isStarred: true } : { isStarred: false }),
     linkedNoteIds: dedupeIds(input.linkedNoteIds),
     createdAt: now,
     updatedAt: now,
@@ -168,6 +194,20 @@ export async function updateTask(
             ? patch.dueDate.trim() || undefined
             : existing.dueDate;
 
+      const nextDueTime =
+        patch.dueTime === null
+          ? undefined
+          : patch.dueTime !== undefined
+            ? normalizeDueTime(patch.dueTime)
+            : existing.dueTime;
+
+      const nextDurationMinutes =
+        patch.durationMinutes === null
+          ? undefined
+          : patch.durationMinutes !== undefined
+            ? normalizeDurationMinutes(patch.durationMinutes)
+            : existing.durationMinutes;
+
       const dateError = validateTaskDates(nextStartDate, nextDueDate);
       if (dateError) {
         throw new Error(dateError);
@@ -210,6 +250,11 @@ export async function updateTask(
                 : existing.isBacklog
             : existing.isBacklog;
 
+      const nextIsStarred =
+        patch.isStarred !== undefined
+          ? Boolean(patch.isStarred)
+          : existing.isStarred;
+
       const next: TaskRecord = {
         ...existing,
         title: nextTitle,
@@ -242,9 +287,14 @@ export async function updateTask(
         ...(nextDescription ? { description: nextDescription } : {}),
         ...(nextStartDate ? { startDate: nextStartDate } : {}),
         ...(nextDueDate ? { dueDate: nextDueDate } : {}),
+        ...(nextDueTime ? { dueTime: nextDueTime } : {}),
+        ...(nextDurationMinutes !== undefined
+          ? { durationMinutes: nextDurationMinutes }
+          : {}),
         ...(nextCategory ? { category: nextCategory } : {}),
         ...(nextGroup ? { group: nextGroup } : {}),
         ...(nextIsBacklog !== undefined ? { isBacklog: nextIsBacklog } : {}),
+        ...(nextIsStarred !== undefined ? { isStarred: nextIsStarred } : {}),
         ...(nextCompletedAt ? { completedAt: nextCompletedAt } : {}),
         ...(existing.lastSyncedRevision !== undefined
           ? { lastSyncedRevision: existing.lastSyncedRevision }
@@ -279,6 +329,17 @@ export async function toggleTaskCompleted(taskId: string): Promise<TaskRecord> {
   }
   const nextStatus: TaskStatus = existing.status === 'done' ? 'todo' : 'done';
   return updateTask(taskId, { status: nextStatus });
+}
+
+/**
+ * Toggles a task's pinned/starred flag (`isStarred`).
+ */
+export async function toggleTaskStarred(taskId: string): Promise<TaskRecord> {
+  const existing = await db.tasks.get(taskId);
+  if (!existing || existing.deletedAt) {
+    throw new Error('Task not found.');
+  }
+  return updateTask(taskId, { isStarred: !existing.isStarred });
 }
 
 /**

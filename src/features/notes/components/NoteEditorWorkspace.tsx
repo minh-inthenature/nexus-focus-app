@@ -17,6 +17,7 @@ import {
   isCanvasNote,
   replaceExcalidrawBlockAt,
 } from '@/features/notes/utils/canvasNote';
+import { isTextNote } from '@/features/notes/utils/textNote';
 import {
   countLinesAndChars,
   extractCodeTags,
@@ -39,6 +40,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { useDriveStore } from '@/stores/useDriveStore';
 import { cn } from '@/utils/cn';
 import { BacklinksPanel } from './BacklinksPanel';
+import { TextNoteEditor } from './TextNoteEditor';
 import type { CodeNoteEditorHandle } from './CodeNoteEditor';
 import { CodeToolbar } from './CodeToolbar';
 import { DriveConflictDialog } from './DriveConflictDialog';
@@ -159,6 +161,7 @@ export function NoteEditorWorkspace({
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
   const codeEditorRef = useRef<CodeNoteEditorHandle | null>(null);
   const debounceTimerRef = useRef<number | null>(null);
+  const diagramFlushTimerRef = useRef<number | null>(null);
   const draftRef = useRef<{
     noteId: string;
     content: string;
@@ -239,6 +242,9 @@ export function NoteEditorWorkspace({
       if (debounceTimerRef.current !== null) {
         window.clearTimeout(debounceTimerRef.current);
       }
+      if (diagramFlushTimerRef.current !== null) {
+        window.clearTimeout(diagramFlushTimerRef.current);
+      }
       if (draftRef.current.dirty) {
         void saveNoteContent(
           draftRef.current.noteId,
@@ -260,6 +266,7 @@ export function NoteEditorWorkspace({
 
   const canvasMode = isCanvasNote(note);
   const codeMode = !canvasMode && isCodeNote(note);
+  const textMode = !canvasMode && !codeMode && isTextNote(note);
   const codeLanguage = getNoteLanguage(note);
   const codeLangMeta = useMemo(
     () => getCodeLanguageMeta(codeLanguage),
@@ -278,6 +285,9 @@ export function NoteEditorWorkspace({
 
       if (debounceTimerRef.current !== null) {
         window.clearTimeout(debounceTimerRef.current);
+      }
+      if (diagramFlushTimerRef.current !== null) {
+        window.clearTimeout(diagramFlushTimerRef.current);
       }
       const delay = canvasMode
         ? CANVAS_AUTOSAVE_DEBOUNCE_MS
@@ -380,7 +390,7 @@ export function NoteEditorWorkspace({
   );
 
   const unusedAttachments = useMemo(() => {
-    if (canvasMode || codeMode || noteAttachments.length === 0) return [];
+    if (canvasMode || codeMode || textMode || noteAttachments.length === 0) return [];
     const activeIds = new Set(extractAttachmentIds(draftContent));
     return noteAttachments.filter((att) => !activeIds.has(att.id));
   }, [canvasMode, codeMode, noteAttachments, draftContent]);
@@ -445,7 +455,7 @@ export function NoteEditorWorkspace({
             codeEditorRef.current?.jumpToLocation(line, column)
           }
         />
-      ) : editorMode === 'edit' ? (
+      ) : textMode ? null : editorMode === 'edit' ? (
         <EditorToolbar
           onFormat={(action) => editorRef.current?.applyFormat(action)}
           onAttachFiles={(files) => void handleAttachFiles(files)}
@@ -457,7 +467,7 @@ export function NoteEditorWorkspace({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background [.dark_&]:bg-[#141414] [.forest_&]:bg-[#111614]">
           <Suspense
             fallback={
-              <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+              <div className="flex flex-1 items-center justify-center bg-[#111614] text-xs text-[#7E8B85]">
                 Loading canvas editor…
               </div>
             }
@@ -506,10 +516,16 @@ export function NoteEditorWorkspace({
               </div>
             ) : null}
 
-            {codeMode ? (
+            {textMode ? (
+              <TextNoteEditor
+                noteId={note.id}
+                value={draftContent}
+                onChange={handleEditorChange}
+              />
+            ) : codeMode ? (
               <Suspense
                 fallback={
-                  <div className="flex h-[460px] items-center justify-center text-xs text-muted-foreground">
+                  <div className="flex h-[460px] items-center justify-center rounded-lg border border-border/60 bg-[#111614] text-xs text-[#7E8B85]">
                     Loading code editor…
                   </div>
                 }
@@ -638,6 +654,18 @@ export function NoteEditorWorkspace({
                 {codeLangMeta.label}
               </span>
             </>
+          ) : textMode ? (
+            <>
+              <span>
+                {draftContent ? draftContent.split(/\r\n|\r|\n/).length : 0}{' '}
+                lines
+              </span>
+              <span>{metrics.words} words</span>
+              <span>{metrics.chars} chars</span>
+              <span className="font-mono text-muted-foreground/80">
+                Plain Text
+              </span>
+            </>
           ) : (
             <>
               <span>{metrics.words} words</span>
@@ -657,7 +685,13 @@ export function NoteEditorWorkspace({
       </footer>
 
       {editingDiagram ? (
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111614]/85 text-xs text-[#7E8B85] backdrop-blur-xs">
+              Loading diagram editor…
+            </div>
+          }
+        >
           <LazyExcalidrawModal
             open
             initialRawJson={editingDiagram.rawJson}
@@ -677,7 +711,13 @@ export function NoteEditorWorkspace({
                 );
                 handleEditorChange(nextDoc);
               }
-              window.setTimeout(() => void flushPendingSave(), 20);
+              if (diagramFlushTimerRef.current !== null) {
+                window.clearTimeout(diagramFlushTimerRef.current);
+              }
+              diagramFlushTimerRef.current = window.setTimeout(() => {
+                diagramFlushTimerRef.current = null;
+                void flushPendingSave();
+              }, 20);
             }}
             onClose={() => setEditingDiagram(null)}
           />

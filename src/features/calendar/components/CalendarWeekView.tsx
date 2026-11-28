@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Check, CheckSquare, Repeat } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -6,6 +6,7 @@ import {
   eventOccursOnDate,
   formatTimeDisplay,
   getEventAccentClasses,
+  getLocalTimePosition,
   getTodayDateKey,
   getWeekDates,
   layoutOverlappingTimedEvents,
@@ -16,7 +17,7 @@ import {
 import { isTaskOverdue } from '@/features/tasks/utils/taskFilters';
 import type { CalendarEventRecord, EventColor, TaskRecord } from '@/services';
 import { cn } from '@/utils/cn';
-import { CurrentTimeLine, useCurrentLocalTime } from './CurrentTimeLine';
+import { LiveCurrentTimeLine } from './CurrentTimeLine';
 import {
   EventColorContextMenu,
   type EventColorContextMenuState,
@@ -44,7 +45,7 @@ const HOURS = Array.from({ length: TOTAL_HOURS }, (_, i) => i);
  * 7-day Week view featuring a dedicated all-day + tasks strip at top and an
  * interactive 24-hour timed grid that positions overlapping events cleanly.
  */
-export function CalendarWeekView({
+export const CalendarWeekView = memo(function CalendarWeekView({
   selectedDate,
   events,
   tasks,
@@ -61,12 +62,14 @@ export function CalendarWeekView({
     null,
   );
   const weekDates = getWeekDates(selectedDate);
-  const nowTime = useCurrentLocalTime();
-  const todayKey = nowTime.dateKey || getTodayDateKey();
+  const todayKey = getTodayDateKey();
 
   useEffect(() => {
     if (scrollContainerRef.current) {
-      const targetHour = Math.max(0, Math.min(TOTAL_HOURS - 10, nowTime.hour - 3));
+      const targetHour = Math.max(
+        0,
+        Math.min(TOTAL_HOURS - 10, getLocalTimePosition().hour - 3),
+      );
       scrollContainerRef.current.scrollTop = targetHour * HOUR_HEIGHT_PX;
     }
     // Intentionally only center once on mount
@@ -329,7 +332,7 @@ export function CalendarWeekView({
                 })}
 
                 {dateKey === todayKey ? (
-                  <CurrentTimeLine topPercent={nowTime.topPercent} />
+                  <LiveCurrentTimeLine dateKey={dateKey} />
                 ) : null}
               </div>
             );
@@ -346,4 +349,4 @@ export function CalendarWeekView({
       />
     </div>
   );
-}
+});

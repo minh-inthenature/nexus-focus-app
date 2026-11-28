@@ -1,5 +1,14 @@
-import { useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from 'react';
+import {
+  AlignLeft,
   Archive,
   CalendarPlus,
   Clock,
@@ -21,6 +30,7 @@ import {
   getNoteLanguage,
   isCodeNote,
 } from '@/features/notes/utils/codeNote';
+import { isTextNote } from '@/features/notes/utils/textNote';
 import { searchNotes } from '@/features/notes/utils/search';
 import {
   buildFolderPathMap,
@@ -108,6 +118,15 @@ export function NotesExplorer({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const importStatusTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (importStatusTimerRef.current !== null) {
+        window.clearTimeout(importStatusTimerRef.current);
+      }
+    };
+  }, []);
 
   const folderPathMap = useMemo(() => buildFolderPathMap(folders), [folders]);
 
@@ -154,24 +173,77 @@ export function NotesExplorer({
     [notes],
   );
 
-  const handleSelectNote = async (noteId: string) => {
-    await onBeforeSelectNote();
-    await setActiveNoteId(noteId);
-    onCloseMobile?.();
-  };
-
-  const handleCreateNote = async (
-    inputOrFolderId: CreateNoteInput | string | null = null,
-  ) => {
-    await onBeforeSelectNote();
-    if (typeof inputOrFolderId === 'string' || inputOrFolderId === null) {
-      await createNote({ folderId: inputOrFolderId });
+  const handleSelectNote = useCallback(
+    async (noteId: string) => {
+      await onBeforeSelectNote();
+      await setActiveNoteId(noteId);
       onCloseMobile?.();
-      return;
-    }
-    await createNote(inputOrFolderId);
-    onCloseMobile?.();
-  };
+    },
+    [onBeforeSelectNote, setActiveNoteId, onCloseMobile],
+  );
+
+  const handleTreeSelectNote = useCallback(
+    (noteId: string) => {
+      void handleSelectNote(noteId);
+    },
+    [handleSelectNote],
+  );
+
+  const handleCreateNote = useCallback(
+    async (inputOrFolderId: CreateNoteInput | string | null = null) => {
+      await onBeforeSelectNote();
+      if (typeof inputOrFolderId === 'string' || inputOrFolderId === null) {
+        await createNote({ folderId: inputOrFolderId });
+        onCloseMobile?.();
+        return;
+      }
+      await createNote(inputOrFolderId);
+      onCloseMobile?.();
+    },
+    [onBeforeSelectNote, createNote, onCloseMobile],
+  );
+
+  const handleTreeCreateNote = useCallback(
+    (folderId: string | null) => {
+      void handleCreateNote(folderId);
+    },
+    [handleCreateNote],
+  );
+
+  const handleTreeCreateSubfolder = useCallback(
+    async (parentId: string | null, name: string) => {
+      await createFolder(name, parentId);
+    },
+    [createFolder],
+  );
+
+  const handleTreeRenameFolder = useCallback(
+    async (folderId: string, name: string) => {
+      await renameFolder(folderId, name);
+    },
+    [renameFolder],
+  );
+
+  const handleTreeRenameNote = useCallback(
+    async (noteId: string, title: string) => {
+      await renameNote(noteId, title);
+    },
+    [renameNote],
+  );
+
+  const handleTreeToggleFavorite = useCallback(
+    async (noteId: string) => {
+      await toggleFavorite(noteId);
+    },
+    [toggleFavorite],
+  );
+
+  const handleTreeMoveNote = useCallback(
+    async (noteId: string, folderId: string | null) => {
+      await moveNote(noteId, folderId);
+    },
+    [moveNote],
+  );
 
   const handleOpenToday = async () => {
     await onBeforeSelectNote();
@@ -213,7 +285,13 @@ export function NotesExplorer({
           : ''
       }.`,
     );
-    window.setTimeout(() => setImportStatus(null), 4000);
+    if (importStatusTimerRef.current !== null) {
+      window.clearTimeout(importStatusTimerRef.current);
+    }
+    importStatusTimerRef.current = window.setTimeout(() => {
+      importStatusTimerRef.current = null;
+      setImportStatus(null);
+    }, 4000);
   };
 
   return (
@@ -299,7 +377,7 @@ export function NotesExplorer({
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".md,.markdown,.canvas,.draw,.excalidraw,.cpp,.cc,.c,.h,.hpp,.py,.ts,.tsx,.js,.jsx,image/*"
+          accept=".md,.markdown,.txt,.canvas,.draw,.excalidraw,.cpp,.cc,.c,.h,.hpp,.py,.ts,.tsx,.js,.jsx,image/*"
           onChange={(e) => void handleImportChange(e)}
           className="hidden"
           aria-hidden="true"
@@ -440,6 +518,7 @@ export function NotesExplorer({
             ) : (
               searchResults.map((result) => {
                 const isCanvas = isCanvasNote(result.note);
+                const isText = isTextNote(result.note);
                 const codeMeta = isCodeNote(result.note)
                   ? getCodeLanguageMeta(getNoteLanguage(result.note))
                   : null;
@@ -466,6 +545,11 @@ export function NotesExplorer({
                           className="h-3.5 w-3.5 shrink-0 text-primary/85"
                           aria-hidden="true"
                         />
+                      ) : isText ? (
+                        <AlignLeft
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
                       ) : (
                         <FileText
                           className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
@@ -485,6 +569,10 @@ export function NotesExplorer({
                       ) : codeMeta ? (
                         <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
                           {codeMeta.badge}
+                        </span>
+                      ) : isText ? (
+                        <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
+                          TXT
                         </span>
                       ) : null}
                     </div>
@@ -523,23 +611,13 @@ export function NotesExplorer({
               activeNoteId={activeNoteId}
               expandedFolderIds={expandedFolderIds}
               onToggleFolder={toggleFolderExpanded}
-              onSelectNote={(id) => void handleSelectNote(id)}
-              onCreateNote={(folderId) => void handleCreateNote(folderId)}
-              onCreateSubfolder={async (parentId, name) => {
-                await createFolder(name, parentId);
-              }}
-              onRenameFolder={async (folderId, name) => {
-                await renameFolder(folderId, name);
-              }}
-              onRenameNote={async (noteId, title) => {
-                await renameNote(noteId, title);
-              }}
-              onToggleFavorite={async (noteId) => {
-                await toggleFavorite(noteId);
-              }}
-              onMoveNote={async (noteId, folderId) => {
-                await moveNote(noteId, folderId);
-              }}
+              onSelectNote={handleTreeSelectNote}
+              onCreateNote={handleTreeCreateNote}
+              onCreateSubfolder={handleTreeCreateSubfolder}
+              onRenameFolder={handleTreeRenameFolder}
+              onRenameNote={handleTreeRenameNote}
+              onToggleFavorite={handleTreeToggleFavorite}
+              onMoveNote={handleTreeMoveNote}
               onRequestDeleteFolder={setFolderToDelete}
             />
           </div>
@@ -580,6 +658,7 @@ export function NotesExplorer({
             ) : (
               recentNotes.map((note) => {
                 const isCanvas = isCanvasNote(note);
+                const isText = isTextNote(note);
                 const codeMeta = isCodeNote(note)
                   ? getCodeLanguageMeta(getNoteLanguage(note))
                   : null;
@@ -606,6 +685,11 @@ export function NotesExplorer({
                           className="h-3 w-3 shrink-0 text-primary/85"
                           aria-hidden="true"
                         />
+                      ) : isText ? (
+                        <AlignLeft
+                          className="h-3 w-3 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
                       ) : (
                         <Clock
                           className="h-3 w-3 shrink-0 text-muted-foreground"
@@ -620,6 +704,10 @@ export function NotesExplorer({
                       ) : codeMeta ? (
                         <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
                           {codeMeta.badge}
+                        </span>
+                      ) : isText ? (
+                        <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
+                          TXT
                         </span>
                       ) : null}
                     </span>
@@ -640,6 +728,7 @@ export function NotesExplorer({
             ) : (
               favoriteNotes.map((note) => {
                 const isCanvas = isCanvasNote(note);
+                const isText = isTextNote(note);
                 const codeMeta = isCodeNote(note)
                   ? getCodeLanguageMeta(getNoteLanguage(note))
                   : null;
@@ -667,6 +756,10 @@ export function NotesExplorer({
                     ) : codeMeta ? (
                       <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
                         {codeMeta.badge}
+                      </span>
+                    ) : isText ? (
+                      <span className="shrink-0 rounded border border-border/80 bg-background/70 px-1 font-mono text-[9px] text-muted-foreground">
+                        TXT
                       </span>
                     ) : null}
                   </button>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Code2, FilePlus2, FileText, Shapes } from 'lucide-react';
+import { AlignLeft, Code2, FilePlus2, FileText, Shapes } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   createEmptyCanvasScene,
@@ -60,6 +60,16 @@ export function NewNoteMenu({
   const handleCreateMarkdown = () => {
     setOpen(false);
     void onCreateNote({ folderId, type: 'markdown' });
+  };
+
+  const handleCreateText = () => {
+    setOpen(false);
+    void onCreateNote({
+      folderId,
+      type: 'text',
+      title: 'Untitled.txt',
+      content: '',
+    });
   };
 
   const handleCreateCanvas = () => {
@@ -139,6 +149,24 @@ export function NewNoteMenu({
               <div>Markdown Note</div>
               <div className="text-[10px] font-normal text-muted-foreground">
                 Rich text, #tags, wiki-links
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleCreateText}
+            className="mt-0.5 flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
+          >
+            <AlignLeft
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <div className="min-w-0 flex-1">
+              <div>Text Note</div>
+              <div className="text-[10px] font-normal text-muted-foreground">
+                Plain writing (.txt), no syntax
               </div>
             </div>
           </button>

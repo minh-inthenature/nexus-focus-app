@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  extendTaskDeadline,
   filterAndSortTasks,
+  formatDurationLabel,
   getOffsetDateString,
   getTodayDateString,
   groupTasksByGroup,
@@ -13,6 +15,7 @@ import {
   validateTaskDates,
 } from '@/features/tasks/utils/taskFilters';
 import type { TaskRecord } from '@/services/storage/db';
+import { mapRemoteTaskToLocal } from '../conflictResolver';
 import { buildSyncPlan } from '../syncPlanner';
 import type { RemoteTaskMetadata, SyncChange } from '../syncTypes';
 
@@ -460,5 +463,105 @@ describe('buildSyncPlan for Tasks (Supabase Hybrid Sync)', () => {
         taskId: 'task-del-remote',
       },
     ]);
+  });
+
+  it('pins starred tasks to top in lists and groups and handles duration/deadline helpers cleanly', () => {
+    const tasks: TaskRecord[] = [
+      makeTask({
+        id: 'p1-unstarred-early',
+        title: 'Problem Set 1',
+        dueDate: '2026-11-27',
+        group: 'Physics 2',
+        isStarred: false,
+      }),
+      makeTask({
+        id: 'p1-starred-later',
+        title: 'Pinned Mock Exam',
+        dueDate: '2026-11-30',
+        group: 'Physics 2',
+        isStarred: true,
+        durationMinutes: 90,
+        dueTime: '15:30',
+      }),
+      makeTask({
+        id: 'u1-unstarred',
+        title: 'Inbox chore',
+        dueDate: '2026-11-27',
+        isStarred: false,
+      }),
+      makeTask({
+        id: 'u2-starred',
+        title: 'Pinned Top Task',
+        dueDate: '2026-12-01',
+        isStarred: true,
+      }),
+    ];
+
+    const sortedAll = filterAndSortTasks(tasks, {
+      preset: 'all',
+      statusFilter: 'all',
+      priorityFilter: 'all',
+      tagFilter: null,
+      categoryFilter: null,
+      searchQuery: '',
+      sortBy: 'dueDate',
+      today: '2026-11-27',
+    });
+
+    // Both starred tasks come before unstarred ones, preserving dueDate order inside each tier
+    expect(sortedAll.map((t) => t.id)).toEqual([
+      'p1-starred-later',
+      'u2-starred',
+      'p1-unstarred-early',
+      'u1-unstarred',
+    ]);
+
+    const grouped = groupTasksByGroup(tasks);
+    expect(grouped.map((b) => b.groupName)).toEqual(['Physics 2', null]);
+    expect(grouped[0]!.tasks.map((t) => t.id)).toEqual([
+      'p1-starred-later',
+      'p1-unstarred-early',
+    ]);
+    expect(grouped[1]!.tasks.map((t) => t.id)).toEqual([
+      'u2-starred',
+      'u1-unstarred',
+    ]);
+
+    expect(formatDurationLabel(undefined)).toBeNull();
+    expect(formatDurationLabel(0)).toBeNull();
+    expect(formatDurationLabel(30)).toBe('30m');
+    expect(formatDurationLabel(60)).toBe('1h');
+    expect(formatDurationLabel(90)).toBe('1h 30m');
+    expect(formatDurationLabel(120)).toBe('2h');
+
+    // Same-day deadline extension
+    expect(extendTaskDeadline('2026-11-28', '14:00', 90)).toEqual({
+      dueDate: '2026-11-28',
+      dueTime: '15:30',
+    });
+    // Rollover across midnight
+    expect(extendTaskDeadline('2026-11-28', '23:15', 90)).toEqual({
+      dueDate: '2026-11-29',
+      dueTime: '00:45',
+    });
+    // Default missing dueDate/dueTime from `now`
+    const mockNow = new Date(2026, 10, 28, 10, 0, 0, 0);
+    expect(extendTaskDeadline(undefined, undefined, 90, mockNow)).toEqual({
+      dueDate: '2026-11-28',
+      dueTime: '11:30',
+    });
+
+    // Sync mapper round-trip for isStarred, durationMinutes, dueTime
+    const mapped = mapRemoteTaskToLocal(
+      makeRemoteTask({
+        isStarred: true,
+        durationMinutes: 90,
+        dueTime: '15:30',
+      }),
+      'user-1',
+    );
+    expect(mapped.isStarred).toBe(true);
+    expect(mapped.durationMinutes).toBe(90);
+    expect(mapped.dueTime).toBe('15:30');
   });
 });

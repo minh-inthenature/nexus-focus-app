@@ -37,6 +37,11 @@ const CalendarPage = lazy(() =>
 const TasksPage = lazy(() =>
   import('@/features/tasks/TasksPage').then((m) => ({ default: m.TasksPage })),
 );
+const HabitsPage = lazy(() =>
+  import('@/features/habits/HabitsPage').then((m) => ({
+    default: m.HabitsPage,
+  })),
+);
 const SettingsPage = lazy(() =>
   import('@/features/settings/SettingsPage').then((m) => ({
     default: m.SettingsPage,
@@ -139,6 +144,14 @@ export const router = createBrowserRouter([
             element: (
               <LazyRoute label="Loading Tasks…">
                 <TasksPage />
+              </LazyRoute>
+            ),
+          },
+          {
+            path: 'habits',
+            element: (
+              <LazyRoute label="Loading Habits…">
+                <HabitsPage />
               </LazyRoute>
             ),
           },

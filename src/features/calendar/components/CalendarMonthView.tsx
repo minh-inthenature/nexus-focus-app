@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import {
   Check,
   CheckSquare,
@@ -57,7 +57,7 @@ const MAX_CELL_ITEMS = 3;
  * `+ more` overflow interaction into the Selected Day Inspector, and visual
  * distinction between calendar events and due tasks.
  */
-export function CalendarMonthView({
+export const CalendarMonthView = memo(function CalendarMonthView({
   selectedDate,
   events,
   tasks,
@@ -517,4 +517,4 @@ export function CalendarMonthView({
       />
     </div>
   );
-}
+});

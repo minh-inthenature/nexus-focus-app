@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { LoadingState } from '@/components/common/LoadingState';
@@ -281,22 +281,53 @@ export function CalendarPage() {
     ? events.find((ev) => ev.id === editingEventId) ?? null
     : null;
 
-  const openSlotModal = (dateKey: string, startTimeHHMM?: string) => {
-    if (startTimeHHMM) {
-      const next = addOneHourHHMM(startTimeHHMM);
-      openCreateModal({
-        startDateKey: dateKey,
-        startTime: startTimeHHMM,
-        endTime: next.time,
-        allDay: false,
-      });
-    } else {
-      openCreateModal({
-        startDateKey: dateKey,
-        endDateKey: dateKey,
-      });
-    }
-  };
+  const openSlotModal = useCallback(
+    (dateKey: string, startTimeHHMM?: string) => {
+      if (startTimeHHMM) {
+        const next = addOneHourHHMM(startTimeHHMM);
+        openCreateModal({
+          startDateKey: dateKey,
+          startTime: startTimeHHMM,
+          endTime: next.time,
+          allDay: false,
+        });
+      } else {
+        openCreateModal({
+          startDateKey: dateKey,
+          endDateKey: dateKey,
+        });
+      }
+    },
+    [openCreateModal],
+  );
+
+  const handleCreateEventOnDate = useCallback(
+    (dateKey: string) => {
+      openSlotModal(dateKey);
+    },
+    [openSlotModal],
+  );
+
+  const handleCreateEventAtSlot = useCallback(
+    (dateKey: string, startTime?: string) => {
+      openSlotModal(dateKey, startTime);
+    },
+    [openSlotModal],
+  );
+
+  const handleChangeEventColor = useCallback(
+    async (eventId: string, nextColor: import('@/services').EventColor) => {
+      await updateEvent(eventId, { color: nextColor });
+    },
+    [updateEvent],
+  );
+
+  const handleToggleTaskCompleted = useCallback(
+    async (id: string) => {
+      await toggleTaskCompleted(id);
+    },
+    [toggleTaskCompleted],
+  );
 
   if (loading && !initialized) {
     return <LoadingState label="Loading calendar…" />;
@@ -460,15 +491,11 @@ export function CalendarPage() {
           showTasks={showTasks}
           showCompletedTasks={showCompletedTasks}
           onSelectDate={setSelectedDate}
-          onCreateEventOnDate={(dateKey) => openSlotModal(dateKey)}
+          onCreateEventOnDate={handleCreateEventOnDate}
           onCreateTaskOnDate={openCreateTaskForDate}
           onEditEvent={openEditModal}
-          onChangeEventColor={async (eventId, nextColor) => {
-            await updateEvent(eventId, { color: nextColor });
-          }}
-          onToggleTaskCompleted={async (id) => {
-            await toggleTaskCompleted(id);
-          }}
+          onChangeEventColor={handleChangeEventColor}
+          onToggleTaskCompleted={handleToggleTaskCompleted}
         />
       ) : viewMode === 'week' ? (
         <CalendarWeekView
@@ -478,16 +505,10 @@ export function CalendarPage() {
           showTasks={showTasks}
           showCompletedTasks={showCompletedTasks}
           onSelectDate={setSelectedDate}
-          onCreateEventAtSlot={(dateKey, startTime) =>
-            openSlotModal(dateKey, startTime)
-          }
+          onCreateEventAtSlot={handleCreateEventAtSlot}
           onEditEvent={openEditModal}
-          onChangeEventColor={async (eventId, nextColor) => {
-            await updateEvent(eventId, { color: nextColor });
-          }}
-          onToggleTaskCompleted={async (id) => {
-            await toggleTaskCompleted(id);
-          }}
+          onChangeEventColor={handleChangeEventColor}
+          onToggleTaskCompleted={handleToggleTaskCompleted}
         />
       ) : viewMode === 'day' ? (
         <CalendarDayView
@@ -497,17 +518,11 @@ export function CalendarPage() {
           notesById={notesById}
           showTasks={showTasks}
           showCompletedTasks={showCompletedTasks}
-          onCreateEventAtSlot={(dateKey, startTime) =>
-            openSlotModal(dateKey, startTime)
-          }
+          onCreateEventAtSlot={handleCreateEventAtSlot}
           onCreateTaskOnDate={openCreateTaskForDate}
           onEditEvent={openEditModal}
-          onChangeEventColor={async (eventId, nextColor) => {
-            await updateEvent(eventId, { color: nextColor });
-          }}
-          onToggleTaskCompleted={async (id) => {
-            await toggleTaskCompleted(id);
-          }}
+          onChangeEventColor={handleChangeEventColor}
+          onToggleTaskCompleted={handleToggleTaskCompleted}
         />
       ) : (
         <CalendarAgendaView
@@ -521,10 +536,8 @@ export function CalendarPage() {
           showTasks={showTasks}
           showCompletedTasks={showCompletedTasks}
           onEditEvent={openEditModal}
-          onCreateEventOnDate={(dateKey) => openSlotModal(dateKey)}
-          onToggleTaskCompleted={async (id) => {
-            await toggleTaskCompleted(id);
-          }}
+          onCreateEventOnDate={handleCreateEventOnDate}
+          onToggleTaskCompleted={handleToggleTaskCompleted}
         />
       )}
 
@@ -593,9 +606,14 @@ export function CalendarPage() {
             priority: payload.priority,
             ...(payload.startDate ? { startDate: payload.startDate } : {}),
             ...(payload.dueDate ? { dueDate: payload.dueDate } : {}),
+            ...(payload.dueTime ? { dueTime: payload.dueTime } : {}),
+            ...(payload.durationMinutes !== null
+              ? { durationMinutes: payload.durationMinutes }
+              : {}),
             ...(payload.category ? { category: payload.category } : {}),
             ...(payload.group ? { group: payload.group } : {}),
             isBacklog: payload.isBacklog,
+            isStarred: payload.isStarred,
             tags: payload.tags,
             linkedNoteIds: payload.linkedNoteIds,
           });

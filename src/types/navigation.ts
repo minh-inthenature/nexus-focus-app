@@ -1,6 +1,12 @@
 import type { LucideIcon } from 'lucide-react';
 
-export type NavRouteId = 'home' | 'notes' | 'calendar' | 'tasks' | 'settings';
+export type NavRouteId =
+  | 'home'
+  | 'notes'
+  | 'calendar'
+  | 'tasks'
+  | 'habits'
+  | 'settings';
 
 export interface NavItemConfig {
   id: NavRouteId;

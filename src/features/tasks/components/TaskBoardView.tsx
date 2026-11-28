@@ -1,14 +1,17 @@
-import { useState, type DragEvent } from 'react';
+import { memo, useState, type DragEvent } from 'react';
 import {
   ArrowUpRight,
   Calendar,
   Check,
+  Clock,
   FileText,
   FolderKanban,
+  Star,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { TaskGroupByMode } from '@/features/tasks/stores/useTasksStore';
 import {
+  formatDurationLabel,
   getTodayDateString,
   groupTasksByGroup,
   isTaskInBacklog,
@@ -23,6 +26,7 @@ export interface TaskBoardViewProps {
   notesById: ReadonlyMap<string, NoteRecord>;
   groupBy: TaskGroupByMode;
   onToggleComplete: (taskId: string) => Promise<void>;
+  onToggleStarred?: (taskId: string) => Promise<void>;
   onChangeStatus: (taskId: string, status: TaskStatus) => Promise<void>;
   onEditTask: (taskId: string) => void;
   onMoveToActive: (taskId: string) => Promise<void>;
@@ -40,11 +44,12 @@ const COLUMNS: readonly { id: TaskStatus; label: string }[] = [
  * Minimal three-column Kanban board supporting drag-and-drop, collapsible Task
  * Group sections inside columns, Backlog quick actions, and status selectors.
  */
-export function TaskBoardView({
+export const TaskBoardView = memo(function TaskBoardView({
   tasks,
   notesById,
   groupBy,
   onToggleComplete,
+  onToggleStarred,
   onChangeStatus,
   onEditTask,
   onMoveToActive,
@@ -124,6 +129,32 @@ export function TaskBoardView({
           >
             {task.title}
           </button>
+
+          {onToggleStarred ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void onToggleStarred(task.id);
+              }}
+              aria-pressed={Boolean(task.isStarred)}
+              aria-label={
+                task.isStarred
+                  ? `Unstar "${task.title}"`
+                  : `Star "${task.title}"`
+              }
+              title={task.isStarred ? 'Unpin from top' : 'Star / Pin to top'}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+            >
+              <Star
+                className={cn(
+                  'h-3 w-3',
+                  task.isStarred && 'fill-amber-400 text-amber-400',
+                )}
+                aria-hidden="true"
+              />
+            </button>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
@@ -161,8 +192,18 @@ export function TaskBoardView({
                 )}
               >
                 <Calendar className="h-2.5 w-2.5" aria-hidden="true" />
-                <span>{task.dueDate}</span>
+                <span>
+                  {task.dueDate}
+                  {task.dueTime ? ` · ${task.dueTime}` : ''}
+                </span>
               </Link>
+            ) : null}
+
+            {formatDurationLabel(task.durationMinutes) ? (
+              <span className="inline-flex items-center gap-0.5 rounded border border-border bg-muted/40 px-1 py-0.5 text-[10px] text-muted-foreground tabular-nums">
+                <Clock className="h-2.5 w-2.5" aria-hidden="true" />
+                <span>{formatDurationLabel(task.durationMinutes)}</span>
+              </span>
             ) : null}
 
             {linkedCount > 0 ? (
@@ -289,4 +330,4 @@ export function TaskBoardView({
       })}
     </div>
   );
-}
+});

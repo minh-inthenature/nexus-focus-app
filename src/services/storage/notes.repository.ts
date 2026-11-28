@@ -15,6 +15,7 @@ import {
   formatDailyNoteDate,
   rewriteWikiLinksForRename,
 } from '@/features/notes/utils/markdown';
+import { isTextFileName } from '@/features/notes/utils/textNote';
 import {
   enqueueSyncChangeInTx,
   notifySyncQueueMutated,
@@ -277,13 +278,20 @@ export async function createNote(
       const isCanvas =
         input.type === 'canvas' ||
         (!input.type && Boolean(rawTitle && isCanvasFileName(rawTitle)));
+      const isText =
+        input.type === 'text' ||
+        (!input.type && Boolean(rawTitle && isTextFileName(rawTitle)));
       const detectedLang =
-        isCanvas || !rawTitle ? null : detectCodeLanguageFromTitle(rawTitle);
+        isCanvas || isText || !rawTitle
+          ? null
+          : detectCodeLanguageFromTitle(rawTitle);
       const noteType: NoteType = isCanvas
         ? 'canvas'
-        : input.type === 'code' || (!input.type && detectedLang !== null)
-          ? 'code'
-          : 'markdown';
+        : isText
+          ? 'text'
+          : input.type === 'code' || (!input.type && detectedLang !== null)
+            ? 'code'
+            : 'markdown';
       const noteLanguage: CodeLanguage | undefined =
         noteType === 'code'
           ? input.language ?? detectedLang ?? 'cpp'
@@ -291,9 +299,11 @@ export async function createNote(
       const defaultTitle =
         noteType === 'canvas'
           ? 'untitled.canvas'
-          : noteType === 'code'
-            ? `untitled.${noteLanguage === 'cpp' ? 'cpp' : noteLanguage === 'python' ? 'py' : noteLanguage === 'typescript' ? 'ts' : noteLanguage === 'javascript' ? 'js' : 'c'}`
-            : 'Untitled Note';
+          : noteType === 'text'
+            ? 'Untitled.txt'
+            : noteType === 'code'
+              ? `untitled.${noteLanguage === 'cpp' ? 'cpp' : noteLanguage === 'python' ? 'py' : noteLanguage === 'typescript' ? 'ts' : noteLanguage === 'javascript' ? 'js' : 'c'}`
+              : 'Untitled Note';
       const resolvedContent =
         noteType === 'canvas' && !input.content?.trim()
           ? serializeCanvasScene(createEmptyCanvasScene())
@@ -473,9 +483,11 @@ export async function renameNote(
       }
 
       const isCanvasTitle = isCanvasFileName(trimmed);
-      const detectedLang = isCanvasTitle
-        ? null
-        : detectCodeLanguageFromTitle(trimmed);
+      const isTextTitle = isTextFileName(trimmed);
+      const detectedLang =
+        isCanvasTitle || isTextTitle
+          ? null
+          : detectCodeLanguageFromTitle(trimmed);
       let nextType: NoteType | undefined = existing.type;
       let nextLanguage: CodeLanguage | undefined = existing.language;
       let nextContent = updatedSelfContent;
@@ -486,19 +498,28 @@ export async function renameNote(
         if (!updatedSelfContent.trim()) {
           nextContent = serializeCanvasScene(createEmptyCanvasScene());
         }
+      } else if (isTextTitle) {
+        nextType = 'text';
+        nextLanguage = undefined;
       } else if (detectedLang !== null) {
         nextType = 'code';
         nextLanguage = detectedLang;
       } else if (
         isMarkdownFileName(trimmed) &&
-        (existing.type === 'code' || existing.type === 'canvas')
+        (existing.type === 'code' ||
+          existing.type === 'canvas' ||
+          existing.type === 'text')
       ) {
         nextType = 'markdown';
         nextLanguage = undefined;
       }
 
       const baseTarget = { ...existing };
-      if (nextType === 'markdown' || nextType === 'canvas') {
+      if (
+        nextType === 'markdown' ||
+        nextType === 'canvas' ||
+        nextType === 'text'
+      ) {
         delete (baseTarget as { language?: CodeLanguage }).language;
       }
 

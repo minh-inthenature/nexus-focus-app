@@ -9,6 +9,7 @@ import {
   deleteTask as repoDeleteTask,
   listTasks,
   toggleTaskCompleted as repoToggleTaskCompleted,
+  toggleTaskStarred as repoToggleTaskStarred,
   updateTask as repoUpdateTask,
   type CreateTaskInput,
   type TaskPriority,
@@ -71,6 +72,7 @@ interface TasksStoreState {
   ) => Promise<TaskRecord>;
   updateTask: (taskId: string, patch: UpdateTaskPatch) => Promise<TaskRecord>;
   toggleCompleted: (taskId: string) => Promise<TaskRecord>;
+  toggleStarred: (taskId: string) => Promise<TaskRecord>;
   deleteTask: (taskId: string) => Promise<void>;
   clearError: () => void;
 }
@@ -226,6 +228,23 @@ export const useTasksStore = create<TasksStoreState>()(
             err instanceof Error
               ? err.message
               : 'Failed to update task completion.';
+          set({ saveStatus: 'error', error: msg });
+          throw err;
+        }
+      },
+
+      toggleStarred: async (taskId) => {
+        set({ saveStatus: 'saving', error: null });
+        try {
+          const updated = await repoToggleTaskStarred(taskId);
+          await get().refreshTasks();
+          set({ saveStatus: 'saved' });
+          return updated;
+        } catch (err) {
+          const msg =
+            err instanceof Error
+              ? err.message
+              : 'Failed to toggle task star.';
           set({ saveStatus: 'error', error: msg });
           throw err;
         }

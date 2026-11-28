@@ -190,7 +190,9 @@ export async function executeSyncCycle(
   ).map((r) => {
     const rawType = typeof r.note_type === 'string' ? r.note_type : 'markdown';
     const resolvedType: NoteType =
-      rawType === 'code' || rawType === 'canvas' ? rawType : 'markdown';
+      rawType === 'code' || rawType === 'canvas' || rawType === 'text'
+        ? rawType
+        : 'markdown';
     const rawLang =
       typeof r.code_language === 'string'
         ? (r.code_language as CodeLanguage)
@@ -223,10 +225,16 @@ export async function executeSyncCycle(
     priority: r.priority as RemoteTaskMetadata['priority'],
     startDate: typeof r.start_date === 'string' ? r.start_date : null,
     dueDate: typeof r.due_date === 'string' ? r.due_date : null,
+    dueTime: typeof r.due_time === 'string' ? r.due_time : null,
+    durationMinutes:
+      typeof r.duration_minutes === 'number' && Number.isFinite(r.duration_minutes)
+        ? r.duration_minutes
+        : null,
     tags: Array.isArray(r.tags) ? r.tags.map(String) : [],
     category: typeof r.category === 'string' ? r.category : null,
     groupName: typeof r.group_name === 'string' ? r.group_name : null,
     isBacklog: typeof r.is_backlog === 'boolean' ? r.is_backlog : false,
+    isStarred: typeof r.is_starred === 'boolean' ? r.is_starred : false,
     linkedNoteIds: Array.isArray(r.linked_note_ids)
       ? r.linked_note_ids.map(String)
       : [],

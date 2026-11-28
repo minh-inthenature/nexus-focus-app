@@ -3,6 +3,7 @@ import {
   CheckSquare,
   FileText,
   Home,
+  Repeat,
   Settings,
 } from 'lucide-react';
 import type { NavItemConfig } from '@/types/navigation';
@@ -31,6 +32,12 @@ export const PRIMARY_NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Tasks',
     to: '/tasks',
     icon: CheckSquare,
+  },
+  {
+    id: 'habits',
+    label: 'Habits',
+    to: '/habits',
+    icon: Repeat,
   },
 ];
 

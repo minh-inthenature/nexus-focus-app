@@ -6,10 +6,12 @@ import {
   ChevronRight,
   FolderKanban,
   Plus,
+  Star,
 } from 'lucide-react';
 import { useTasksStore } from '@/features/tasks/stores/useTasksStore';
 import {
   filterAndSortTasks,
+  formatDurationLabel,
   getTodayDateString,
   groupTasksByGroup,
   isTaskInBacklog,
@@ -19,10 +21,15 @@ import {
 } from '@/features/tasks/utils/taskFilters';
 import type { TaskPriority, TaskRecord } from '@/services';
 import { cn } from '@/utils/cn';
+import { MobileTaskEditSheet } from './MobileTaskEditSheet';
 
 type MobileTaskTab = 'active' | 'today' | 'backlog' | 'completed';
 
-const MOBILE_TABS: readonly { id: MobileTaskTab; label: string; preset: TaskFilterPreset }[] = [
+const MOBILE_TABS: readonly {
+  id: MobileTaskTab;
+  label: string;
+  preset: TaskFilterPreset;
+}[] = [
   { id: 'active', label: 'Active', preset: 'active' },
   { id: 'today', label: 'Today', preset: 'today' },
   { id: 'backlog', label: 'Backlog', preset: 'backlog' },
@@ -36,21 +43,25 @@ const PRIORITY_TONE: Record<TaskPriority, string> = {
 };
 
 /**
- * Minimalist mobile Tasks view with grouped sections, inline quick-add (`@Group`),
- * and large one-tap completion checkboxes.
+ * Minimalist mobile Tasks view with pinned starred tasks on top, collapsible groups,
+ * duration pills, inline quick-add (`@Group`), and tap-to-edit bottom sheet.
  */
 export function MobileTasksView() {
   const tasks = useTasksStore((s) => s.tasks);
   const initialized = useTasksStore((s) => s.initialized);
   const initialize = useTasksStore((s) => s.initialize);
   const toggleCompleted = useTasksStore((s) => s.toggleCompleted);
+  const toggleStarred = useTasksStore((s) => s.toggleStarred);
   const createTask = useTasksStore((s) => s.createTask);
   const updateTask = useTasksStore((s) => s.updateTask);
 
   const [tab, setTab] = useState<MobileTaskTab>('active');
   const [draftTitle, setDraftTitle] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<
+    Record<string, boolean>
+  >({});
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!initialized) void initialize();
@@ -76,7 +87,8 @@ export function MobileTasksView() {
 
   const tabCounts = useMemo(
     () => ({
-      active: tasks.filter((t) => t.status !== 'done' && !isTaskInBacklog(t)).length,
+      active: tasks.filter((t) => t.status !== 'done' && !isTaskInBacklog(t))
+        .length,
       today: filterAndSortTasks(tasks, {
         preset: 'today',
         statusFilter: 'all',
@@ -87,10 +99,16 @@ export function MobileTasksView() {
         sortBy: 'dueDate',
         today,
       }).length,
-      backlog: tasks.filter((t) => t.status !== 'done' && isTaskInBacklog(t)).length,
+      backlog: tasks.filter((t) => t.status !== 'done' && isTaskInBacklog(t))
+        .length,
       completed: tasks.filter((t) => t.status === 'done').length,
     }),
     [tasks, today],
+  );
+
+  const editingTask = useMemo(
+    () => (editingTaskId ? tasks.find((t) => t.id === editingTaskId) ?? null : null),
+    [tasks, editingTaskId],
   );
 
   const handleInlineCreate = async (e: FormEvent) => {
@@ -121,14 +139,18 @@ export function MobileTasksView() {
   const renderTaskRow = (task: TaskRecord) => {
     const overdue = isTaskOverdue(task, today);
     const inBacklog = isTaskInBacklog(task);
+    const durationLabel = formatDurationLabel(task.durationMinutes);
     return (
       <div
         key={task.id}
-        className="flex items-center gap-1.5 rounded-xl border border-[#1E2623] bg-[#111614] pr-3 py-1"
+        className="flex items-center gap-1 rounded-xl border border-[#1E2623] bg-[#111614] pr-2 py-1"
       >
         <button
           type="button"
-          onClick={() => void toggleCompleted(task.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            void toggleCompleted(task.id);
+          }}
           aria-label={`Toggle ${task.title}`}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl active:bg-[#18221E] transition-colors"
         >
@@ -140,11 +162,17 @@ export function MobileTasksView() {
                 : 'border-[#33403A] bg-transparent',
             )}
           >
-            {task.status === 'done' && <Check className="h-3.5 w-3.5 stroke-[2.5]" />}
+            {task.status === 'done' && (
+              <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+            )}
           </span>
         </button>
 
-        <div className="min-w-0 flex-1 py-1.5">
+        <button
+          type="button"
+          onClick={() => setEditingTaskId(task.id)}
+          className="min-w-0 flex-1 py-1.5 text-left"
+        >
           <p
             className={cn(
               'text-sm leading-snug break-words',
@@ -167,6 +195,12 @@ export function MobileTasksView() {
               >
                 <Calendar className="h-2.5 w-2.5" />
                 {task.dueDate === today ? 'Today' : task.dueDate}
+                {task.dueTime ? ` · ${task.dueTime}` : ''}
+              </span>
+            )}
+            {!task.dueDate && task.dueTime && (
+              <span className="rounded px-1.5 py-0.5 text-[10px] border border-[#1E2623] bg-[#161D1A] text-[#9BA8A2] tabular-nums">
+                {task.dueTime}
               </span>
             )}
             {task.priority !== 'medium' && (
@@ -180,19 +214,46 @@ export function MobileTasksView() {
               </span>
             )}
           </div>
-        </div>
+        </button>
 
-        {inBacklog && task.status !== 'done' && (
+        <div className="flex shrink-0 items-center gap-1">
+          {inBacklog && task.status !== 'done' && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void updateTask(task.id, { dueDate: today, isBacklog: false });
+              }}
+              className="shrink-0 rounded-lg border border-[#d97757]/35 bg-[#d97757]/15 px-2 py-1 text-[11px] font-medium text-[#f0a287] active:bg-[#d97757]/25"
+            >
+              Today
+            </button>
+          )}
+          {durationLabel && (
+            <span className="rounded-md border border-[#1E2623] bg-[#161D1A] px-1.5 py-0.5 text-[10px] font-medium text-[#9BA8A2] tabular-nums">
+              {durationLabel}
+            </span>
+          )}
           <button
             type="button"
-            onClick={() =>
-              void updateTask(task.id, { dueDate: today, isBacklog: false })
+            onClick={(e) => {
+              e.stopPropagation();
+              void toggleStarred(task.id);
+            }}
+            aria-pressed={Boolean(task.isStarred)}
+            aria-label={
+              task.isStarred ? `Unstar ${task.title}` : `Star ${task.title}`
             }
-            className="shrink-0 rounded-lg border border-[#d97757]/35 bg-[#d97757]/15 px-2.5 py-1.5 text-[11px] font-medium text-[#f0a287] active:bg-[#d97757]/25"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#6E7D76] active:bg-[#18221E]"
           >
-            Today
+            <Star
+              className={cn(
+                'h-4 w-4 transition-colors',
+                task.isStarred && 'fill-[#e5a93c] text-[#e5a93c]',
+              )}
+            />
           </button>
-        )}
+        </div>
       </div>
     );
   };
@@ -292,6 +353,11 @@ export function MobileTasksView() {
           })}
         </div>
       )}
+
+      <MobileTaskEditSheet
+        task={editingTask}
+        onClose={() => setEditingTaskId(null)}
+      />
     </div>
   );
 }

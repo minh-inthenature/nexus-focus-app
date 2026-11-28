@@ -14,6 +14,7 @@ import {
   extractAttachmentIds,
   sanitizeFileName,
 } from '@/features/notes/utils/markdown';
+import { isTextFileName, isTextNote } from '@/features/notes/utils/textNote';
 import { attachmentService } from './attachment.service';
 import { db, type NoteRecord } from './db';
 import {
@@ -32,7 +33,7 @@ const IMAGE_OR_ATTACHMENT_EXT_RE =
   /\.(png|jpe?g|gif|webp|svg|bmp|ico|pdf|txt|csv)$/i;
 const MARKDOWN_EXT_RE = /\.(md|markdown)$/i;
 const IMPORTABLE_TEXT_EXT_RE =
-  /\.(md|markdown|canvas|draw|excalidraw|cpp|cc|cxx|hpp|hh|hxx|c|h|py|pyw|ts|tsx|mts|cts|js|jsx|mjs|cjs)$/i;
+  /\.(md|markdown|txt|canvas|draw|excalidraw|cpp|cc|cxx|hpp|hh|hxx|c|h|py|pyw|ts|tsx|mts|cts|js|jsx|mjs|cjs)$/i;
 
 function triggerDownload(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
@@ -89,6 +90,15 @@ export function exportNoteAsMarkdown(note: NoteRecord): void {
     const meta = getCodeLanguageMeta(lang);
     const hasCodeExt = detectCodeLanguageFromTitle(safeBase) !== null;
     const fileName = hasCodeExt ? safeBase : `${safeBase}${meta.ext}`;
+    const blob = new Blob([note.content], {
+      type: 'text/plain;charset=utf-8',
+    });
+    triggerDownload(blob, fileName);
+    return;
+  }
+
+  if (isTextNote(note)) {
+    const fileName = isTextFileName(safeBase) ? safeBase : `${safeBase}.txt`;
     const blob = new Blob([note.content], {
       type: 'text/plain;charset=utf-8',
     });
@@ -165,6 +175,10 @@ export async function exportVaultAsZip(): Promise<void> {
         detectCodeLanguageFromTitle(noteTitle) !== null
           ? noteTitle
           : `${noteTitle}${langMeta.ext}`;
+    } else if (isTextNote(note)) {
+      archiveFileName = isTextFileName(noteTitle)
+        ? noteTitle
+        : `${noteTitle}.txt`;
     } else {
       archiveFileName = `${noteTitle}.md`;
     }
@@ -178,7 +192,7 @@ export async function exportVaultAsZip(): Promise<void> {
     const depth = folderSegments.length;
     const relativePrefix = depth > 0 ? '../'.repeat(depth) : './';
     let fileContent = note.content;
-    if (!isCodeNote(note) && !isCanvasNote(note)) {
+    if (!isCodeNote(note) && !isCanvasNote(note) && !isTextNote(note)) {
       const referencedIds = extractAttachmentIds(fileContent);
       for (const attachmentId of referencedIds) {
         const zipPath = attachmentZipPaths.get(attachmentId);
@@ -246,9 +260,12 @@ export async function importMarkdownFiles(
         : null;
 
     const isCanvas = isCanvasFileName(textFile.name);
-    const detectedLang = isCanvas ? null : detectCodeLanguageFromTitle(textFile.name);
+    const isText = !isCanvas && isTextFileName(textFile.name);
+    const detectedLang =
+      isCanvas || isText ? null : detectCodeLanguageFromTitle(textFile.name);
     const isMarkdown =
       !isCanvas &&
+      !isText &&
       (MARKDOWN_EXT_RE.test(textFile.name) || detectedLang === null);
     const rawTitle = isMarkdown
       ? textFile.name.replace(MARKDOWN_EXT_RE, '').trim() || 'Imported Note'
@@ -265,7 +282,7 @@ export async function importMarkdownFiles(
         (n) => n.title.toLowerCase() === finalTitle.toLowerCase(),
       )
     ) {
-      if (!isMarkdown && (detectedLang || isCanvas)) {
+      if (!isMarkdown && (detectedLang || isCanvas || isText)) {
         const dotIdx = rawTitle.lastIndexOf('.');
         const stem = dotIdx > 0 ? rawTitle.slice(0, dotIdx) : rawTitle;
         const ext = dotIdx > 0 ? rawTitle.slice(dotIdx) : '';
@@ -285,13 +302,15 @@ export async function importMarkdownFiles(
           : rawText,
       ...(isCanvas
         ? { type: 'canvas' as const }
-        : detectedLang
-          ? { type: 'code' as const, language: detectedLang }
-          : {}),
+        : isText
+          ? { type: 'text' as const }
+          : detectedLang
+            ? { type: 'code' as const, language: detectedLang }
+            : {}),
     });
     existingNotes.push(createdNote);
 
-    if (detectedLang || isCanvas) {
+    if (detectedLang || isCanvas || isText) {
       importedNotes.push(createdNote);
       continue;
     }

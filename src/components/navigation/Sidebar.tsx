@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import {
+  AlignLeft,
   FileCode2,
   FileText,
   Folder,
@@ -27,6 +28,7 @@ import {
   getNoteLanguage,
   isCodeNote,
 } from '@/features/notes/utils/codeNote';
+import { isTextNote } from '@/features/notes/utils/textNote';
 import { useTheme } from '@/hooks/useTheme';
 import { useAppStore } from '@/stores/useAppStore';
 import { cn } from '@/utils/cn';
@@ -102,7 +104,7 @@ export function Sidebar() {
       {/* Header: Brand + Collapse Control */}
       <div
         className={cn(
-          'flex h-12 shrink-0 items-center border-b border-sidebar-border px-2.5',
+          'flex h-13 shrink-0 items-center border-b border-sidebar-border px-2.5',
           collapsed ? 'justify-center px-2' : 'justify-between',
         )}
       >
@@ -110,9 +112,9 @@ export function Sidebar() {
           <Link
             to="/"
             onClick={closeMobile}
-            className="truncate rounded-lg px-1 py-0.5 font-serif text-[17px] font-medium tracking-[-0.02em] text-sidebar-foreground transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="inline-flex items-center truncate rounded-lg py-0.5 font-['Plus_Jakarta_Sans',sans-serif] text-lg font-semibold tracking-[-0.035em] leading-none text-[#E4E8E6] lowercase transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
-            Nexus
+            nexus
           </Link>
         ) : null}
 
@@ -207,6 +209,7 @@ export function Sidebar() {
               <div className="space-y-0.5">
                 {favoriteNotes.map((note) => {
                   const isCanvas = isCanvasNote(note);
+                  const isText = isTextNote(note);
                   const codeMeta = isCodeNote(note)
                     ? getCodeLanguageMeta(getNoteLanguage(note))
                     : null;
@@ -230,6 +233,10 @@ export function Sidebar() {
                         <span className="shrink-0 rounded border border-border/70 bg-muted/50 px-1 font-mono text-[9px] text-muted-foreground">
                           {codeMeta.badge}
                         </span>
+                      ) : isText ? (
+                        <span className="shrink-0 rounded border border-border/70 bg-muted/50 px-1 font-mono text-[9px] text-muted-foreground">
+                          TXT
+                        </span>
                       ) : null}
                     </Link>
                   );
@@ -245,6 +252,7 @@ export function Sidebar() {
               <div className="space-y-0.5">
                 {recentNotes.map((note) => {
                   const isCanvas = isCanvasNote(note);
+                  const isText = isTextNote(note);
                   const codeMeta = isCodeNote(note)
                     ? getCodeLanguageMeta(getNoteLanguage(note))
                     : null;
@@ -265,6 +273,11 @@ export function Sidebar() {
                           className="h-3 w-3 shrink-0 text-primary/80"
                           aria-hidden="true"
                         />
+                      ) : isText ? (
+                        <AlignLeft
+                          className="h-3 w-3 shrink-0 text-primary/80"
+                          aria-hidden="true"
+                        />
                       ) : (
                         <FileText
                           className="h-3 w-3 shrink-0 text-muted-foreground"
@@ -279,6 +292,10 @@ export function Sidebar() {
                       ) : codeMeta ? (
                         <span className="shrink-0 rounded border border-border/70 bg-muted/50 px-1 font-mono text-[9px] text-muted-foreground">
                           {codeMeta.badge}
+                        </span>
+                      ) : isText ? (
+                        <span className="shrink-0 rounded border border-border/70 bg-muted/50 px-1 font-mono text-[9px] text-muted-foreground">
+                          TXT
                         </span>
                       ) : null}
                     </Link>

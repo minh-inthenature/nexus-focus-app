@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   AlertCircle,
   Check,
@@ -84,6 +84,7 @@ export function TasksPage() {
     createTask,
     updateTask,
     toggleCompleted,
+    toggleStarred,
     deleteTask,
   } = useTasksStore();
 
@@ -172,6 +173,54 @@ export function TasksPage() {
     () =>
       tasks.filter((t) => t.status !== 'done' && !isTaskInBacklog(t)).length,
     [tasks],
+  );
+
+  const handleToggleComplete = useCallback(
+    async (id: string) => {
+      await toggleCompleted(id);
+    },
+    [toggleCompleted],
+  );
+
+  const handleToggleStarred = useCallback(
+    async (id: string) => {
+      await toggleStarred(id);
+    },
+    [toggleStarred],
+  );
+
+  const handleChangeStatus = useCallback(
+    async (id: string, status: import('@/services').TaskStatus) => {
+      await updateTask(id, { status });
+    },
+    [updateTask],
+  );
+
+  const handleMoveToActive = useCallback(
+    async (id: string) => {
+      await updateTask(id, { isBacklog: false });
+    },
+    [updateTask],
+  );
+
+  const handleScheduleToday = useCallback(
+    async (id: string) => {
+      await updateTask(id, {
+        dueDate: getTodayDateString(),
+        isBacklog: false,
+      });
+    },
+    [updateTask],
+  );
+
+  const handleAddTaskToGroup = useCallback(
+    (groupName: string) => {
+      openCreateModal([], {
+        group: groupName,
+        isBacklog: preset === 'backlog',
+      });
+    },
+    [openCreateModal, preset],
   );
 
   const editingTask = editingTaskId
@@ -319,64 +368,32 @@ export function TasksPage() {
           tasks={visibleTasks}
           notesById={notesById}
           groupBy={groupBy}
-          onToggleComplete={async (id) => {
-            await toggleCompleted(id);
-          }}
-          onChangeStatus={async (id, status) => {
-            await updateTask(id, { status });
-          }}
+          onToggleComplete={handleToggleComplete}
+          onToggleStarred={handleToggleStarred}
+          onChangeStatus={handleChangeStatus}
           onEditTask={openEditModal}
-          onMoveToActive={async (id) => {
-            await updateTask(id, { isBacklog: false });
-          }}
-          onScheduleToday={async (id) => {
-            await updateTask(id, {
-              dueDate: getTodayDateString(),
-              isBacklog: false,
-            });
-          }}
-          onAddTaskToGroup={(groupName) =>
-            openCreateModal([], {
-              group: groupName,
-              isBacklog: preset === 'backlog',
-            })
-          }
+          onMoveToActive={handleMoveToActive}
+          onScheduleToday={handleScheduleToday}
+          onAddTaskToGroup={handleAddTaskToGroup}
         />
       ) : viewMode === 'board' ? (
         <TaskBoardView
           tasks={visibleTasks}
           notesById={notesById}
           groupBy={groupBy}
-          onToggleComplete={async (id) => {
-            await toggleCompleted(id);
-          }}
-          onChangeStatus={async (id, status) => {
-            await updateTask(id, { status });
-          }}
+          onToggleComplete={handleToggleComplete}
+          onToggleStarred={handleToggleStarred}
+          onChangeStatus={handleChangeStatus}
           onEditTask={openEditModal}
-          onMoveToActive={async (id) => {
-            await updateTask(id, { isBacklog: false });
-          }}
-          onScheduleToday={async (id) => {
-            await updateTask(id, {
-              dueDate: getTodayDateString(),
-              isBacklog: false,
-            });
-          }}
-          onAddTaskToGroup={(groupName) =>
-            openCreateModal([], {
-              group: groupName,
-              isBacklog: preset === 'backlog',
-            })
-          }
+          onMoveToActive={handleMoveToActive}
+          onScheduleToday={handleScheduleToday}
+          onAddTaskToGroup={handleAddTaskToGroup}
         />
       ) : (
         <TaskScheduleView
           tasks={visibleTasks}
           notesById={notesById}
-          onToggleComplete={async (id) => {
-            await toggleCompleted(id);
-          }}
+          onToggleComplete={handleToggleComplete}
           onEditTask={openEditModal}
         />
       )}
@@ -399,9 +416,12 @@ export function TasksPage() {
               priority: payload.priority,
               startDate: payload.startDate || null,
               dueDate: payload.dueDate || null,
+              dueTime: payload.dueTime || null,
+              durationMinutes: payload.durationMinutes,
               category: payload.category || null,
               group: payload.group || null,
               isBacklog: payload.isBacklog,
+              isStarred: payload.isStarred,
               tags: payload.tags,
               linkedNoteIds: payload.linkedNoteIds,
             });
@@ -413,9 +433,14 @@ export function TasksPage() {
               priority: payload.priority,
               ...(payload.startDate ? { startDate: payload.startDate } : {}),
               ...(payload.dueDate ? { dueDate: payload.dueDate } : {}),
+              ...(payload.dueTime ? { dueTime: payload.dueTime } : {}),
+              ...(payload.durationMinutes !== null
+                ? { durationMinutes: payload.durationMinutes }
+                : {}),
               ...(payload.category ? { category: payload.category } : {}),
               ...(payload.group ? { group: payload.group } : {}),
               isBacklog: payload.isBacklog,
+              isStarred: payload.isStarred,
               tags: payload.tags,
               linkedNoteIds: payload.linkedNoteIds,
             });

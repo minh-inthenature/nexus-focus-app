@@ -2,6 +2,7 @@ import { isValidElement, useEffect, useMemo, useState, type ReactNode } from 're
 import { FileDown, Paperclip } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
+import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { findExcalidrawBlocks } from '@/features/notes/utils/canvasNote';
@@ -217,7 +218,7 @@ export function MarkdownPreview({
   return (
     <div className="nexus-prose py-4">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         rehypePlugins={[rehypeKatex]}
         urlTransform={safeUrlTransform}
         components={{

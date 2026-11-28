@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import {
   Check,
   CheckSquare,
@@ -16,6 +16,7 @@ import {
   formatEventTimeRangeLabel,
   formatTimeDisplay,
   getEventAccentClasses,
+  getLocalTimePosition,
   getTodayDateKey,
   layoutOverlappingTimedEvents,
   resolveEventColor,
@@ -28,7 +29,7 @@ import type {
   TaskRecord,
 } from '@/services';
 import { cn } from '@/utils/cn';
-import { CurrentTimeLine, useCurrentLocalTime } from './CurrentTimeLine';
+import { LiveCurrentTimeLine } from './CurrentTimeLine';
 import {
   EventColorContextMenu,
   type EventColorContextMenuState,
@@ -55,7 +56,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
  * Detailed single-day schedule showing all-day events and tasks at top and a
  * clickable 24-hour chronological grid for timed events.
  */
-export function CalendarDayView({
+export const CalendarDayView = memo(function CalendarDayView({
   selectedDate,
   events,
   tasks,
@@ -72,14 +73,13 @@ export function CalendarDayView({
   const [colorMenu, setColorMenu] = useState<EventColorContextMenuState | null>(
     null,
   );
-  const nowTime = useCurrentLocalTime();
-  const todayKey = nowTime.dateKey || getTodayDateKey();
+  const todayKey = getTodayDateKey();
 
   useEffect(() => {
     if (scrollRef.current) {
       const targetHour =
         selectedDate === todayKey
-          ? Math.max(0, Math.min(14, nowTime.hour - 3))
+          ? Math.max(0, Math.min(14, getLocalTimePosition().hour - 3))
           : 8;
       scrollRef.current.scrollTop = targetHour * HOUR_HEIGHT_PX;
     }
@@ -373,7 +373,7 @@ export function CalendarDayView({
               })}
 
               {selectedDate === todayKey ? (
-                <CurrentTimeLine topPercent={nowTime.topPercent} />
+                <LiveCurrentTimeLine dateKey={selectedDate} />
               ) : null}
             </div>
           </div>
@@ -428,4 +428,4 @@ export function CalendarDayView({
       />
     </div>
   );
-}
+});

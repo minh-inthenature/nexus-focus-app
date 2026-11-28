@@ -131,7 +131,11 @@ const C_PREPROCESSOR_KEYWORDS = new Set<string>([
 export function getNoteType(
   note?: Pick<NoteRecord, 'type'> | null,
 ): NoteType {
-  if (note?.type === 'code' || note?.type === 'canvas') {
+  if (
+    note?.type === 'code' ||
+    note?.type === 'canvas' ||
+    note?.type === 'text'
+  ) {
     return note.type;
   }
   return 'markdown';

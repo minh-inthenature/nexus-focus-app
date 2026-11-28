@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { getLocalTimePosition } from '@/features/calendar/utils/calendarDateUtils';
 
 /**
@@ -48,3 +48,19 @@ export function CurrentTimeLine({ topPercent }: CurrentTimeLineProps) {
     </div>
   );
 }
+
+/**
+ * Isolated current-time indicator wrapper that owns the 60s interval timer so
+ * heavy Calendar day/week grids do not re-render on minute ticks.
+ */
+export const LiveCurrentTimeLine = memo(function LiveCurrentTimeLine({
+  dateKey,
+}: {
+  dateKey: string;
+}) {
+  const nowTime = useCurrentLocalTime();
+  if (nowTime.dateKey !== dateKey) {
+    return null;
+  }
+  return <CurrentTimeLine topPercent={nowTime.topPercent} />;
+});

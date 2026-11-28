@@ -174,8 +174,90 @@ export interface TaskGroupBucket {
 }
 
 /**
+ * Formats integer duration minutes into a compact label (e.g. `30m`, `1h`, `1h 30m`, `2h`).
+ */
+export function formatDurationLabel(durationMinutes?: number): string | null {
+  if (
+    durationMinutes === undefined ||
+    !Number.isFinite(durationMinutes) ||
+    durationMinutes <= 0
+  ) {
+    return null;
+  }
+  const rounded = Math.round(durationMinutes);
+  const hours = Math.floor(rounded / 60);
+  const mins = rounded % 60;
+  if (hours > 0 && mins > 0) return `${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${mins}m`;
+}
+
+/**
+ * Adds `addMinutes` to `(dueDate, dueTime)` in local time (defaulting missing date
+ * to today and missing time to `now`), returning `{ dueDate, dueTime }` in local `YYYY-MM-DD` / `HH:MM`.
+ */
+export function extendTaskDeadline(
+  dueDate: string | undefined,
+  dueTime: string | undefined,
+  addMinutes: number,
+  now: Date = new Date(),
+): { dueDate: string; dueTime: string } {
+  const safeAdd = Number.isFinite(addMinutes) ? Math.max(0, Math.round(addMinutes)) : 0;
+  const baseDateStr =
+    dueDate && /^\d{4}-\d{2}-\d{2}$/.test(dueDate.trim())
+      ? dueDate.trim()
+      : getTodayDateString(now);
+
+  const [yStr, mStr, dStr] = baseDateStr.split('-');
+  let hours = now.getHours();
+  let minutes = now.getMinutes();
+
+  if (dueTime && /^\d{2}:\d{2}$/.test(dueTime.trim())) {
+    const [hStr, minStr] = dueTime.trim().split(':');
+    const parsedH = Number(hStr);
+    const parsedM = Number(minStr);
+    if (parsedH >= 0 && parsedH <= 23 && parsedM >= 0 && parsedM <= 59) {
+      hours = parsedH;
+      minutes = parsedM;
+    }
+  }
+
+  const target = new Date(
+    Number(yStr),
+    Number(mStr) - 1,
+    Number(dStr),
+    hours,
+    minutes,
+    0,
+    0,
+  );
+  target.setMinutes(target.getMinutes() + safeAdd);
+
+  const nextY = target.getFullYear();
+  const nextM = String(target.getMonth() + 1).padStart(2, '0');
+  const nextD = String(target.getDate()).padStart(2, '0');
+  const nextHH = String(target.getHours()).padStart(2, '0');
+  const nextMM = String(target.getMinutes()).padStart(2, '0');
+
+  return {
+    dueDate: `${nextY}-${nextM}-${nextD}`,
+    dueTime: `${nextHH}:${nextMM}`,
+  };
+}
+
+function pinStarredTasksFirst(items: readonly TaskRecord[]): TaskRecord[] {
+  const starred: TaskRecord[] = [];
+  const unstarred: TaskRecord[] = [];
+  for (const item of items) {
+    if (item.isStarred) starred.push(item);
+    else unstarred.push(item);
+  }
+  return [...starred, ...unstarred];
+}
+
+/**
  * Bundles tasks by their `group` name (sorted alphabetically), keeping ungrouped
- * tasks in a final `groupName: null` bucket.
+ * tasks in a final `groupName: null` bucket and pinning starred tasks on top.
  */
 export function groupTasksByGroup(
   tasks: readonly TaskRecord[],
@@ -197,7 +279,7 @@ export function groupTasksByGroup(
   const buckets: TaskGroupBucket[] = Array.from(namedMap.keys())
     .sort((a, b) => a.localeCompare(b))
     .map((groupName) => {
-      const items = namedMap.get(groupName) ?? [];
+      const items = pinStarredTasksFirst(namedMap.get(groupName) ?? []);
       const completedCount = items.filter((t) => t.status === 'done').length;
       return {
         groupName,
@@ -208,11 +290,12 @@ export function groupTasksByGroup(
     });
 
   if (ungrouped.length > 0) {
+    const sortedUngrouped = pinStarredTasksFirst(ungrouped);
     buckets.push({
       groupName: null,
-      tasks: ungrouped,
-      completedCount: ungrouped.filter((t) => t.status === 'done').length,
-      totalCount: ungrouped.length,
+      tasks: sortedUngrouped,
+      completedCount: sortedUngrouped.filter((t) => t.status === 'done').length,
+      totalCount: sortedUngrouped.length,
     });
   }
 
@@ -338,6 +421,9 @@ export function filterAndSortTasks(
   });
 
   return filtered.sort((a, b) => {
+    const starDiff = (b.isStarred ? 1 : 0) - (a.isStarred ? 1 : 0);
+    if (starDiff !== 0) return starDiff;
+
     switch (options.sortBy) {
       case 'dueDate': {
         const aDate = a.dueDate ?? a.startDate ?? '';

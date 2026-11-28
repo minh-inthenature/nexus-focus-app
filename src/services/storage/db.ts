@@ -17,7 +17,7 @@ export interface FolderRecord {
   readonly deletedAt?: ISODateString;
 }
 
-export type NoteType = 'markdown' | 'code' | 'canvas';
+export type NoteType = 'markdown' | 'code' | 'canvas' | 'text';
 export type CodeLanguage =
   | 'cpp'
   | 'python'
@@ -85,10 +85,13 @@ export interface TaskRecord {
   readonly priority: TaskPriority;
   readonly startDate?: string;
   readonly dueDate?: string;
+  readonly dueTime?: string;
+  readonly durationMinutes?: number;
   readonly tags: readonly string[];
   readonly category?: string;
   readonly group?: string;
   readonly isBacklog?: boolean;
+  readonly isStarred?: boolean;
   readonly linkedNoteIds: readonly EntityId[];
   readonly createdAt: ISODateString;
   readonly updatedAt: ISODateString;
@@ -165,6 +168,37 @@ export interface DriveNoteMappingRecord {
   readonly updatedAt: ISODateString;
 }
 
+export type HabitCategory = 'Study' | 'Health' | 'Focus' | 'Personal';
+export type HabitFrequency = 'daily' | 'weekdays' | 'custom_days';
+export type HabitAccentColor =
+  | 'sage'
+  | 'amber'
+  | 'blue'
+  | 'terracotta'
+  | 'violet';
+
+export interface HabitRecord {
+  readonly id: EntityId;
+  readonly userId: EntityId;
+  readonly title: string;
+  readonly category: HabitCategory;
+  readonly frequency: HabitFrequency;
+  readonly targetDays: readonly number[];
+  readonly accentColor: HabitAccentColor;
+  readonly sortOrder: number;
+  readonly isArchived: boolean;
+  readonly createdAt: ISODateString;
+  readonly updatedAt: ISODateString;
+}
+
+export interface HabitLogRecord {
+  readonly id: EntityId;
+  readonly habitId: EntityId;
+  readonly userId: EntityId;
+  readonly completedDate: string; // YYYY-MM-DD local date
+  readonly createdAt: ISODateString;
+}
+
 /**
  * Single local-first IndexedDB database for Nexus powered by Dexie.js.
  * Schema upgrades must increment version numbers rather than recreating stores
@@ -185,6 +219,8 @@ export class NexusDatabase extends Dexie {
   sync_meta!: Table<SyncMetaRecord, string>;
   tasks!: Table<TaskRecord, EntityId>;
   calendar_events!: Table<CalendarEventRecord, EntityId>;
+  habits!: Table<HabitRecord, EntityId>;
+  habit_logs!: Table<HabitLogRecord, EntityId>;
 
   constructor() {
     super('nexus_db');
@@ -275,6 +311,25 @@ export class NexusDatabase extends Dexie {
       sync_meta: 'key',
       tasks: 'id, userId, status, priority, dueDate, startDate, category, updatedAt, deletedAt',
       calendar_events: 'id, userId, startAt, endAt, allDay, category, googleEventId, updatedAt, deletedAt',
+    });
+
+    this.version(7).stores({
+      folders: 'id, parentId, name, updatedAt, deletedAt',
+      notes: 'id, folderId, title, isFavorite, isDaily, dailyDate, updatedAt, deletedAt',
+      note_links: 'id, sourceNoteId, targetNoteId, targetTitle, [sourceNoteId+targetNoteId]',
+      tags: 'id, &name',
+      note_tags: 'id, noteId, tagId, [noteId+tagId]',
+      attachments: 'id, noteId, fileName, mimeType, createdAt, deletedAt',
+      note_revisions: 'id, noteId, revision, createdAt',
+      offline_operations: 'id, entityType, entityId, queuedAt',
+      drive_note_mappings: 'id, &localNoteId, driveFileId, userId, updatedAt',
+      sync_changes: 'id, entityType, entityId, status, createdAt, [entityType+entityId]',
+      sync_conflicts: 'id, entityType, entityId, createdAt',
+      sync_meta: 'key',
+      tasks: 'id, userId, status, priority, dueDate, startDate, category, updatedAt, deletedAt',
+      calendar_events: 'id, userId, startAt, endAt, allDay, category, googleEventId, updatedAt, deletedAt',
+      habits: 'id, userId, isArchived, sortOrder, createdAt',
+      habit_logs: 'id, habitId, userId, completedDate, [habitId+completedDate]',
     });
   }
 }

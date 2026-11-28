@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useCalendarStore } from '@/features/calendar/stores/useCalendarStore';
+import { useHabitsStore } from '@/features/habits/stores/useHabitsStore';
 import { useNotesStore } from '@/features/notes/stores/useNotesStore';
 import { useTasksStore } from '@/features/tasks/stores/useTasksStore';
 import { syncEngine } from '@/services';
@@ -67,6 +68,7 @@ function AuthAndDriveBoot({ children }: { children: ReactNode }) {
           useNotesStore.getState().refreshVault(),
           useTasksStore.getState().refreshTasks(),
           useCalendarStore.getState().refreshEvents(),
+          useHabitsStore.getState().syncWithCloud(),
         ]);
       },
     });
@@ -84,6 +86,7 @@ function AuthAndDriveBoot({ children }: { children: ReactNode }) {
     if (userId) {
       void refreshDriveStatus(userId);
       void refreshCalendarStatus();
+      void useHabitsStore.getState().syncWithCloud();
     } else {
       resetDrive();
       resetCalendar();

@@ -111,10 +111,15 @@ export function mapRemoteTaskToLocal(
     priority: remote.priority,
     ...(remote.startDate ? { startDate: remote.startDate } : {}),
     ...(remote.dueDate ? { dueDate: remote.dueDate } : {}),
+    ...(remote.dueTime ? { dueTime: remote.dueTime } : {}),
+    ...(remote.durationMinutes !== null && remote.durationMinutes !== undefined
+      ? { durationMinutes: remote.durationMinutes }
+      : {}),
     tags: [...remote.tags],
     ...(remote.category ? { category: remote.category } : {}),
     ...(remote.groupName ? { group: remote.groupName } : {}),
     ...(remote.isBacklog !== undefined ? { isBacklog: remote.isBacklog } : {}),
+    ...(remote.isStarred !== undefined ? { isStarred: remote.isStarred } : {}),
     linkedNoteIds: [...remote.linkedNoteIds],
     createdAt: remote.createdAt,
     updatedAt: remote.updatedAt,
@@ -158,6 +163,9 @@ export async function upsertTaskRowToSupabase(
     ...basePayload,
     group_name: task.group ?? null,
     is_backlog: Boolean(task.isBacklog),
+    is_starred: Boolean(task.isStarred),
+    duration_minutes: task.durationMinutes ?? null,
+    due_time: task.dueTime ?? null,
   };
 
   const { data, error } = await client
@@ -170,7 +178,9 @@ export async function upsertTaskRowToSupabase(
     const missingOptionalColumn =
       error.code === '42703' ||
       error.code === 'PGRST204' ||
-      /group_name|is_backlog/i.test(error.message);
+      /group_name|is_backlog|is_starred|duration_minutes|due_time/i.test(
+        error.message,
+      );
     if (missingOptionalColumn) {
       const retry = await client
         .from('tasks')
@@ -261,10 +271,15 @@ async function resolveTaskConflict(
       priority: snap.priority,
       ...(snap.startDate ? { startDate: snap.startDate } : {}),
       ...(snap.dueDate ? { dueDate: snap.dueDate } : {}),
+      ...(snap.dueTime ? { dueTime: snap.dueTime } : {}),
+      ...(snap.durationMinutes !== null && snap.durationMinutes !== undefined
+        ? { durationMinutes: snap.durationMinutes }
+        : {}),
       tags: snap.tags,
       ...(snap.category ? { category: snap.category } : {}),
       ...(snap.groupName ? { group: snap.groupName } : {}),
       ...(snap.isBacklog !== undefined ? { isBacklog: snap.isBacklog } : {}),
+      ...(snap.isStarred !== undefined ? { isStarred: snap.isStarred } : {}),
       linkedNoteIds: snap.linkedNoteIds,
     });
   }

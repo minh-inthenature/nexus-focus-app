@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import type { EditorMode, SaveStatus } from '@/features/notes/stores/useNotesStore';
 import { isCanvasNote } from '@/features/notes/utils/canvasNote';
+import { isTextNote } from '@/features/notes/utils/textNote';
 import { isCodeNote } from '@/features/notes/utils/codeNote';
 import { shiftDailyDate } from '@/features/notes/utils/markdown';
 import { buildFolderPathMap, type FolderRecord, type NoteRecord } from '@/services';
@@ -285,7 +286,7 @@ export function NoteTopBar({
           </span>
 
           {/* Edit / Preview switcher (Markdown notes only) */}
-          {!isCodeNote(note) && !isCanvasNote(note) ? (
+          {!isCodeNote(note) && !isCanvasNote(note) && !isTextNote(note) ? (
             <div
               role="group"
               aria-label="Editor mode"
@@ -547,14 +548,18 @@ export function NoteTopBar({
                 ? 'Export canvas (.canvas)'
                 : isCodeNote(note)
                   ? 'Download code file'
-                  : 'Export note as Markdown (.md)'
+                  : isTextNote(note)
+                    ? 'Export plain text (.txt)'
+                    : 'Export note as Markdown (.md)'
             }
             aria-label={
               isCanvasNote(note)
                 ? 'Export canvas'
                 : isCodeNote(note)
                   ? 'Download code file'
-                  : 'Export note as Markdown'
+                  : isTextNote(note)
+                    ? 'Export plain text'
+                    : 'Export note as Markdown'
             }
             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
           >

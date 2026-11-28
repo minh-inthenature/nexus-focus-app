@@ -37,10 +37,13 @@ export interface RemoteTaskMetadata {
   readonly priority: TaskPriority;
   readonly startDate?: string | null;
   readonly dueDate?: string | null;
+  readonly dueTime?: string | null;
+  readonly durationMinutes?: number | null;
   readonly tags: readonly string[];
   readonly category?: string | null;
   readonly groupName?: string | null;
   readonly isBacklog?: boolean;
+  readonly isStarred?: boolean;
   readonly linkedNoteIds: readonly EntityId[];
   readonly revision: number;
   readonly createdAt: ISODateString;

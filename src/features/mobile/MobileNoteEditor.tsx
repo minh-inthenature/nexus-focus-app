@@ -5,8 +5,10 @@ import {
   Check,
   CheckSquare,
   Code,
+  Copy,
   Eye,
   Heading2,
+  IndentIncrease,
   Italic,
   List,
   Pencil,
@@ -16,6 +18,12 @@ import {
 import { MarkdownPreview } from '@/features/notes/components/MarkdownPreview';
 import { useNotesStore } from '@/features/notes/stores/useNotesStore';
 import { isCanvasNote } from '@/features/notes/utils/canvasNote';
+import {
+  applyPlainTextTab,
+  countTextMetrics,
+  isTextNote,
+  togglePlainTextLinePrefix,
+} from '@/features/notes/utils/textNote';
 import type { NoteRecord } from '@/services';
 import { cn } from '@/utils/cn';
 
@@ -48,10 +56,12 @@ export function MobileNoteEditor({
   const [mode, setMode] = useState<'edit' | 'preview'>(
     isCanvasNote(note) ? 'preview' : 'edit',
   );
+  const [copied, setCopied] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
+  const copyTimerRef = useRef<number | null>(null);
   const lastSavedContentRef = useRef(note.content);
   const latestContentRef = useRef(note.content);
   const noteIdRef = useRef(note.id);
@@ -64,6 +74,11 @@ export function MobileNoteEditor({
     lastSavedContentRef.current = note.content;
     latestContentRef.current = note.content;
     setMode(isCanvasNote(note) ? 'preview' : 'edit');
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
+    setCopied(false);
   }, [note.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track visualViewport height so keyboard open/close never clips the toolbar
@@ -96,6 +111,9 @@ export function MobileNoteEditor({
     return () => {
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current);
+      }
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
       }
     };
   }, []);
@@ -151,6 +169,22 @@ export function MobileNoteEditor({
   };
 
   const canvasOnly = isCanvasNote(note);
+  const textOnly = !canvasOnly && isTextNote(note);
+  const plainMetrics = textOnly ? countTextMetrics(contentDraft) : null;
+
+  const applyPlainEdit = (result: {
+    value: string;
+    selectionStart: number;
+    selectionEnd: number;
+  }) => {
+    handleContentChange(result.value);
+    window.requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(result.selectionStart, result.selectionEnd);
+    });
+  };
 
   return (
     <div
@@ -206,7 +240,7 @@ export function MobileNoteEditor({
             />
           </button>
 
-          {!canvasOnly && (
+          {!canvasOnly && !textOnly && (
             <button
               type="button"
               onClick={() => {
@@ -242,7 +276,7 @@ export function MobileNoteEditor({
           <div className="rounded-xl border border-[#1E2623] bg-[#0D1210] p-4 text-xs text-[#7E8B85]">
             Canvas drawings can be viewed and edited on tablet/desktop screens.
           </div>
-        ) : mode === 'preview' ? (
+        ) : !textOnly && mode === 'preview' ? (
           <div className="prose-sm max-w-none text-[#E4E8E6]">
             <MarkdownPreview
               content={contentDraft}
@@ -267,18 +301,136 @@ export function MobileNoteEditor({
             ref={textareaRef}
             value={contentDraft}
             onChange={(e) => handleContentChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (!textOnly || e.key !== 'Tab') return;
+              e.preventDefault();
+              const el = e.currentTarget;
+              applyPlainEdit(
+                applyPlainTextTab(
+                  contentDraft,
+                  el.selectionStart ?? 0,
+                  el.selectionEnd ?? 0,
+                  e.shiftKey,
+                ),
+              );
+            }}
             onBlur={() => void flushContentSave()}
-            placeholder="Start writing…"
+            placeholder={
+              textOnly
+                ? 'Write freely — plain text, exact line breaks…'
+                : 'Start writing…'
+            }
             aria-label="Note content"
-            className="h-full min-h-[240px] w-full resize-none bg-transparent text-[15px] leading-relaxed text-[#E4E8E6] placeholder:text-[#6E7D76] outline-none"
+            className={cn(
+              'h-full min-h-[240px] w-full resize-none bg-transparent text-[15px] leading-relaxed text-[#E4E8E6] placeholder:text-[#6E7D76] outline-none',
+              textOnly && 'whitespace-pre-wrap break-words font-sans',
+            )}
           />
         )}
       </div>
 
       {/* Compact Keyboard-Friendly Formatting Bar */}
-      {!canvasOnly && mode === 'edit' && (
+      {!canvasOnly && (textOnly || mode === 'edit') && (
         <div className="shrink-0 border-t border-[#1E2623] bg-[#0A0E0C] px-2 py-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))]">
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+          {textOnly ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    const el = textareaRef.current;
+                    applyPlainEdit(
+                      togglePlainTextLinePrefix(
+                        contentDraft,
+                        el?.selectionStart ?? contentDraft.length,
+                        el?.selectionEnd ?? contentDraft.length,
+                        '• ',
+                      ),
+                    );
+                  }}
+                  aria-label="Toggle bullet"
+                  className="flex h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-[#A3B0AA] active:bg-[#18221E]"
+                >
+                  <List className="h-4 w-4" />
+                  <span>Bullet</span>
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    const el = textareaRef.current;
+                    applyPlainEdit(
+                      togglePlainTextLinePrefix(
+                        contentDraft,
+                        el?.selectionStart ?? contentDraft.length,
+                        el?.selectionEnd ?? contentDraft.length,
+                        '☐ ',
+                      ),
+                    );
+                  }}
+                  aria-label="Toggle checklist"
+                  className="flex h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-[#A3B0AA] active:bg-[#18221E]"
+                >
+                  <CheckSquare className="h-4 w-4" />
+                  <span>Check</span>
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    const el = textareaRef.current;
+                    applyPlainEdit(
+                      applyPlainTextTab(
+                        contentDraft,
+                        el?.selectionStart ?? contentDraft.length,
+                        el?.selectionEnd ?? contentDraft.length,
+                        false,
+                      ),
+                    );
+                  }}
+                  aria-label="Indent line"
+                  className="flex h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-[#A3B0AA] active:bg-[#18221E]"
+                >
+                  <IndentIncrease className="h-4 w-4" />
+                  <span>Tab</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard
+                      ?.writeText(contentDraft)
+                      .then(() => {
+                        setCopied(true);
+                        if (copyTimerRef.current !== null) {
+                          window.clearTimeout(copyTimerRef.current);
+                        }
+                        copyTimerRef.current = window.setTimeout(() => {
+                          copyTimerRef.current = null;
+                          setCopied(false);
+                        }, 1800);
+                      })
+                      .catch(() => {});
+                  }}
+                  aria-label="Copy plain text"
+                  className="flex h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-[#A3B0AA] active:bg-[#18221E]"
+                >
+                  {copied ? (
+                    <Check className="h-4 w-4 text-emerald-400" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+              {plainMetrics && (
+                <span className="shrink-0 pr-1 font-mono text-[11px] tabular-nums text-[#7E8B85]">
+                  {plainMetrics.lines}L · {plainMetrics.words}W
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
@@ -342,7 +494,8 @@ export function MobileNoteEditor({
             >
               <Sigma className="h-4 w-4" />
             </button>
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,15 +1,18 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import {
   ArrowUpRight,
   Calendar,
   Check,
+  Clock,
   FileText,
   FolderKanban,
   Pencil,
+  Star,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { TaskGroupByMode } from '@/features/tasks/stores/useTasksStore';
 import {
+  formatDurationLabel,
   getTodayDateString,
   groupTasksByGroup,
   isTaskInBacklog,
@@ -29,6 +32,7 @@ export interface TaskListViewProps {
   notesById: ReadonlyMap<string, NoteRecord>;
   groupBy: TaskGroupByMode;
   onToggleComplete: (taskId: string) => Promise<void>;
+  onToggleStarred?: (taskId: string) => Promise<void>;
   onChangeStatus: (taskId: string, status: TaskStatus) => Promise<void>;
   onEditTask: (taskId: string) => void;
   onMoveToActive: (taskId: string) => Promise<void>;
@@ -46,11 +50,12 @@ const PRIORITY_LABELS: Record<TaskPriority, string> = {
  * Compact desktop-first task list supporting optional collapsible Task Group
  * containers with progress indicators, plus 1-click Backlog scheduling actions.
  */
-export function TaskListView({
+export const TaskListView = memo(function TaskListView({
   tasks,
   notesById,
   groupBy,
   onToggleComplete,
+  onToggleStarred,
   onChangeStatus,
   onEditTask,
   onMoveToActive,
@@ -221,9 +226,48 @@ export function TaskListView({
               )}
             >
               <Calendar className="h-3 w-3" aria-hidden="true" />
-              <span>{task.dueDate}</span>
+              <span>
+                {task.dueDate}
+                {task.dueTime ? ` · ${task.dueTime}` : ''}
+              </span>
               {overdue ? <span>(Overdue)</span> : null}
             </Link>
+          ) : null}
+
+          {formatDurationLabel(task.durationMinutes) ? (
+            <span
+              title="Allocated duration"
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums"
+            >
+              <Clock className="h-2.5 w-2.5" aria-hidden="true" />
+              <span>{formatDurationLabel(task.durationMinutes)}</span>
+            </span>
+          ) : null}
+
+          {onToggleStarred ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void onToggleStarred(task.id);
+              }}
+              aria-pressed={Boolean(task.isStarred)}
+              aria-label={
+                task.isStarred
+                  ? `Unstar "${task.title}"`
+                  : `Star "${task.title}"`
+              }
+              title={task.isStarred ? 'Unpin from top' : 'Star / Pin to top'}
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+            >
+              <Star
+                className={cn(
+                  'h-3.5 w-3.5',
+                  task.isStarred && 'fill-amber-400 text-amber-400',
+                )}
+                aria-hidden="true"
+              />
+            </button>
           ) : null}
 
           <select
@@ -291,4 +335,4 @@ export function TaskListView({
       {tasks.map(renderTaskRow)}
     </div>
   );
-}
+});

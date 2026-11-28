@@ -1,5 +1,14 @@
-import { useEffect, useMemo } from 'react';
-import { Calendar, Check, CheckCircle2, Clock } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Calendar,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Repeat,
+  Star,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCalendarStore } from '@/features/calendar/stores/useCalendarStore';
 import {
@@ -10,8 +19,15 @@ import {
   getTodayDateKey,
 } from '@/features/calendar/utils/calendarDateUtils';
 import { expandRecurringEventsForWindow } from '@/features/calendar/utils/recurrence';
+import { useHabitsStore } from '@/features/habits/stores/useHabitsStore';
+import {
+  buildHabitCompletedSetMap,
+  getHabitAccentMeta,
+  isHabitScheduledOnDate,
+} from '@/features/habits/utils/habitUtils';
 import { useTasksStore } from '@/features/tasks/stores/useTasksStore';
 import {
+  formatDurationLabel,
   getTodayDateString,
   isTaskDueToday,
   isTaskInBacklog,
@@ -19,6 +35,7 @@ import {
 } from '@/features/tasks/utils/taskFilters';
 import type { TaskPriority } from '@/services';
 import { cn } from '@/utils/cn';
+import { MobileTaskEditSheet } from './MobileTaskEditSheet';
 
 const PRIORITY_BADGE: Record<TaskPriority, string> = {
   high: 'border-[#d97757]/40 bg-[#d97757]/15 text-[#f0a287]',
@@ -28,7 +45,7 @@ const PRIORITY_BADGE: Record<TaskPriority, string> = {
 
 /**
  * Focused mobile Today view combining today's Calendar schedule blocks
- * and due/overdue active Tasks with large one-tap checkboxes.
+ * and due/overdue active Tasks (starred pinned on top) with tap-to-edit sheet support.
  */
 export function MobileTodayView() {
   const navigate = useNavigate();
@@ -41,6 +58,16 @@ export function MobileTodayView() {
   const tasksInitialized = useTasksStore((s) => s.initialized);
   const initializeTasks = useTasksStore((s) => s.initialize);
   const toggleCompleted = useTasksStore((s) => s.toggleCompleted);
+  const toggleStarred = useTasksStore((s) => s.toggleStarred);
+
+  const habits = useHabitsStore((s) => s.habits);
+  const habitLogs = useHabitsStore((s) => s.logs);
+  const habitsInitialized = useHabitsStore((s) => s.initialized);
+  const initializeHabits = useHabitsStore((s) => s.initialize);
+  const toggleHabitCompletion = useHabitsStore((s) => s.toggleCompletion);
+
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [habitsExpanded, setHabitsExpanded] = useState(false);
 
   useEffect(() => {
     if (!calendarInitialized) void initializeCalendar();
@@ -50,9 +77,31 @@ export function MobileTodayView() {
     if (!tasksInitialized) void initializeTasks();
   }, [tasksInitialized, initializeTasks]);
 
+  useEffect(() => {
+    if (!habitsInitialized) void initializeHabits();
+  }, [habitsInitialized, initializeHabits]);
+
   const todayKey = getTodayDateKey();
   const todayTaskDate = getTodayDateString();
   const formattedDay = useMemo(() => formatDayHeaderLabel(todayKey), [todayKey]);
+
+  const habitCompletedMap = useMemo(
+    () => buildHabitCompletedSetMap(habitLogs),
+    [habitLogs],
+  );
+  const todayHabits = useMemo(
+    () =>
+      habits.filter(
+        (h) => !h.isArchived && isHabitScheduledOnDate(h, todayKey),
+      ),
+    [habits, todayKey],
+  );
+  const todayHabitsDone = useMemo(
+    () =>
+      todayHabits.filter((h) => habitCompletedMap.get(h.id)?.has(todayKey))
+        .length,
+    [todayHabits, habitCompletedMap, todayKey],
+  );
 
   const todayEvents = useMemo(() => {
     const expanded = expandRecurringEventsForWindow(events, todayKey, todayKey);
@@ -72,6 +121,8 @@ export function MobileTodayView() {
     );
     const weight: Record<TaskPriority, number> = { high: 0, medium: 1, low: 2 };
     return dueOrOverdue.sort((a, b) => {
+      const starDiff = (b.isStarred ? 1 : 0) - (a.isStarred ? 1 : 0);
+      if (starDiff !== 0) return starDiff;
       const overdueA = isTaskOverdue(a, todayTaskDate) ? 0 : 1;
       const overdueB = isTaskOverdue(b, todayTaskDate) ? 0 : 1;
       if (overdueA !== overdueB) return overdueA - overdueB;
@@ -87,6 +138,11 @@ export function MobileTodayView() {
     [tasks],
   );
 
+  const editingTask = useMemo(
+    () => (editingTaskId ? tasks.find((t) => t.id === editingTaskId) ?? null : null),
+    [tasks, editingTaskId],
+  );
+
   return (
     <div className="px-4 py-4 space-y-6">
       <div>
@@ -97,6 +153,89 @@ export function MobileTodayView() {
           {formattedDay}
         </h1>
       </div>
+
+      {/* Collapsible Today's Habits Progress Pill */}
+      {todayHabits.length > 0 && (
+        <section
+          aria-label="Today's Habits"
+          className="rounded-xl border border-[#1E2623] bg-[#111614] overflow-hidden"
+        >
+          <button
+            type="button"
+            onClick={() => setHabitsExpanded((prev) => !prev)}
+            aria-expanded={habitsExpanded}
+            className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left active:bg-[#18221E]"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Repeat className="h-3.5 w-3.5 shrink-0 text-[#8AB8A3]" />
+              <span className="text-xs font-medium text-[#E4E8E6]">
+                Today&apos;s Habits
+              </span>
+              <span className="rounded-full border border-[#1E2623] bg-[#161D1A] px-2 py-0.5 text-[10px] font-medium text-[#8AB8A3] tabular-nums">
+                {todayHabitsDone}/{todayHabits.length}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[#1E2623]">
+                <div
+                  className="h-full rounded-full bg-[#74a88e] transition-all"
+                  style={{
+                    width: `${todayHabits.length > 0 ? Math.round((todayHabitsDone / todayHabits.length) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+              {habitsExpanded ? (
+                <ChevronUp className="h-3.5 w-3.5 text-[#7E8B85]" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-[#7E8B85]" />
+              )}
+            </div>
+          </button>
+
+          {habitsExpanded && (
+            <div className="border-t border-[#1E2623] divide-y divide-[#1E2623]">
+              {todayHabits.map((habit) => {
+                const isDone = Boolean(
+                  habitCompletedMap.get(habit.id)?.has(todayKey),
+                );
+                const accent = getHabitAccentMeta(habit.accentColor);
+                return (
+                  <button
+                    key={habit.id}
+                    type="button"
+                    onClick={() => void toggleHabitCompletion(habit.id, todayKey)}
+                    aria-pressed={isDone}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-[#18221E]"
+                  >
+                    <span
+                      className={cn(
+                        'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors',
+                        isDone
+                          ? accent.checkedCircleClass
+                          : 'border-[#33403A] bg-transparent',
+                      )}
+                    >
+                      {isDone && <Check className="h-3 w-3 stroke-[2.5]" />}
+                    </span>
+                    <span
+                      className={cn(
+                        'min-w-0 flex-1 truncate text-xs font-medium',
+                        isDone ? 'text-[#7E8B85]' : 'text-[#E4E8E6]',
+                      )}
+                    >
+                      {habit.title}
+                    </span>
+                    <span className="text-[10px] text-[#6E7D76]">
+                      {habit.category}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Upcoming Schedule Blocks */}
       <section aria-label="Today's Schedule" className="space-y-2.5">
@@ -171,14 +310,18 @@ export function MobileTodayView() {
           <div className="space-y-2">
             {todayTasks.map((task) => {
               const overdue = isTaskOverdue(task, todayTaskDate);
+              const durationLabel = formatDurationLabel(task.durationMinutes);
               return (
                 <div
                   key={task.id}
-                  className="flex items-center gap-2 rounded-xl border border-[#1E2623] bg-[#111614] pr-3.5 py-1.5"
+                  className="flex items-center gap-1.5 rounded-xl border border-[#1E2623] bg-[#111614] pr-2 py-1.5"
                 >
                   <button
                     type="button"
-                    onClick={() => void toggleCompleted(task.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void toggleCompleted(task.id);
+                    }}
                     aria-label={`Complete ${task.title}`}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl active:bg-[#18221E] transition-colors"
                   >
@@ -190,11 +333,17 @@ export function MobileTodayView() {
                           : 'border-[#33403A] bg-transparent',
                       )}
                     >
-                      {task.status === 'done' && <Check className="h-3.5 w-3.5 stroke-[2.5]" />}
+                      {task.status === 'done' && (
+                        <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                      )}
                     </span>
                   </button>
 
-                  <div className="min-w-0 flex-1 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTaskId(task.id)}
+                    className="min-w-0 flex-1 py-1.5 text-left"
+                  >
                     <p className="text-sm font-medium text-[#E4E8E6] leading-snug break-words">
                       {task.title}
                     </p>
@@ -202,6 +351,11 @@ export function MobileTodayView() {
                       {overdue && (
                         <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-[#d97757]/15 text-[#f0a287] border border-[#d97757]/35">
                           Overdue
+                        </span>
+                      )}
+                      {task.dueTime && (
+                        <span className="rounded px-1.5 py-0.5 text-[10px] border border-[#1E2623] bg-[#161D1A] text-[#9BA8A2] tabular-nums">
+                          {task.dueTime}
                         </span>
                       )}
                       {task.priority !== 'medium' && (
@@ -220,6 +374,35 @@ export function MobileTodayView() {
                         </span>
                       )}
                     </div>
+                  </button>
+
+                  <div className="flex shrink-0 items-center gap-1">
+                    {durationLabel && (
+                      <span className="rounded-md border border-[#1E2623] bg-[#161D1A] px-1.5 py-0.5 text-[10px] font-medium text-[#9BA8A2] tabular-nums">
+                        {durationLabel}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void toggleStarred(task.id);
+                      }}
+                      aria-pressed={Boolean(task.isStarred)}
+                      aria-label={
+                        task.isStarred
+                          ? `Unstar ${task.title}`
+                          : `Star ${task.title}`
+                      }
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#6E7D76] active:bg-[#18221E]"
+                    >
+                      <Star
+                        className={cn(
+                          'h-4 w-4 transition-colors',
+                          task.isStarred && 'fill-[#e5a93c] text-[#e5a93c]',
+                        )}
+                      />
+                    </button>
                   </div>
                 </div>
               );
@@ -227,6 +410,11 @@ export function MobileTodayView() {
           </div>
         )}
       </section>
+
+      <MobileTaskEditSheet
+        task={editingTask}
+        onClose={() => setEditingTaskId(null)}
+      />
     </div>
   );
 }

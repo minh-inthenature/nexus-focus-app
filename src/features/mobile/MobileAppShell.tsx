@@ -6,23 +6,26 @@ import {
   FileText,
   Plus,
   RefreshCw,
+  Repeat,
   Settings,
 } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useNotesStore } from '@/features/notes/stores/useNotesStore';
 import { useSyncStore } from '@/stores/useSyncStore';
 import { cn } from '@/utils/cn';
+import { MobileHabitsView } from './MobileHabitsView';
 import { MobileNoteEditor } from './MobileNoteEditor';
 import { MobileNotesView } from './MobileNotesView';
 import { MobileQuickCaptureSheet } from './MobileQuickCaptureSheet';
 import { MobileTasksView } from './MobileTasksView';
 import { MobileTodayView } from './MobileTodayView';
 
-type MobileTab = 'today' | 'notes' | 'tasks';
+type MobileTab = 'today' | 'notes' | 'tasks' | 'habits';
 
 function resolveTabFromPath(pathname: string): MobileTab {
   if (pathname.startsWith('/notes')) return 'notes';
   if (pathname.startsWith('/tasks')) return 'tasks';
+  if (pathname.startsWith('/habits')) return 'habits';
   return 'today';
 }
 
@@ -42,6 +45,7 @@ export function MobileAppShell() {
 
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [createHabitOpen, setCreateHabitOpen] = useState(false);
 
   const isSettingsRoute = pathname.startsWith('/settings');
   const activeTab = resolveTabFromPath(pathname);
@@ -76,7 +80,7 @@ export function MobileAppShell() {
     >
       {/* Safe-Area Mobile Top Header */}
       <header className="shrink-0 border-b border-[#1E2623] bg-[#0A0E0C] pt-[env(safe-area-inset-top)]">
-        <div className="flex h-12 items-center justify-between px-4">
+        <div className="flex h-14 items-center justify-between px-4">
           {isSettingsRoute ? (
             <button
               type="button"
@@ -87,17 +91,9 @@ export function MobileAppShell() {
               <span>Back</span>
             </button>
           ) : (
-            <div className="flex items-center gap-2">
-              <span
-                className="flex h-5 w-5 items-center justify-center rounded-md bg-[#F3F3F1]"
-                aria-hidden="true"
-              >
-                <span className="h-2.5 w-2.5 rounded-full bg-[#0B0B0C] ring-1 ring-[#0B0B0C]/20" />
-              </span>
-              <span className="text-base font-medium tracking-tight text-[#E4E8E6] lowercase">
-                nexus
-              </span>
-            </div>
+            <span className="font-['Plus_Jakarta_Sans',sans-serif] text-lg font-semibold tracking-[-0.035em] leading-none text-[#E4E8E6] lowercase">
+              nexus
+            </span>
           )}
 
           <div className="flex items-center gap-1">
@@ -138,6 +134,11 @@ export function MobileAppShell() {
           <MobileNotesView onOpenNote={(noteId) => setEditingNoteId(noteId)} />
         ) : activeTab === 'tasks' ? (
           <MobileTasksView />
+        ) : activeTab === 'habits' ? (
+          <MobileHabitsView
+            externalCreateOpen={createHabitOpen}
+            onCloseExternalCreate={() => setCreateHabitOpen(false)}
+          />
         ) : (
           <MobileTodayView />
         )}
@@ -147,8 +148,14 @@ export function MobileAppShell() {
       {!isSettingsRoute && (
         <button
           type="button"
-          onClick={() => setCaptureOpen(true)}
-          aria-label="Quick capture"
+          onClick={() => {
+            if (activeTab === 'habits') {
+              setCreateHabitOpen(true);
+            } else {
+              setCaptureOpen(true);
+            }
+          }}
+          aria-label={activeTab === 'habits' ? 'New habit' : 'Quick capture'}
           className="fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 flex h-12 w-12 items-center justify-center rounded-full bg-[#d97757] text-[#0A0E0C] shadow-lg active:scale-95 transition-transform"
         >
           <Plus className="h-6 w-6 stroke-[2.25]" />
@@ -160,7 +167,7 @@ export function MobileAppShell() {
         aria-label="Mobile navigation"
         className="fixed inset-x-0 bottom-0 z-20 border-t border-[#1E2623] bg-[#0A0E0C]/92 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
       >
-        <div className="grid grid-cols-3 h-14">
+        <div className="grid grid-cols-4 h-14">
           <button
             type="button"
             onClick={() => navigate('/')}
@@ -204,6 +211,21 @@ export function MobileAppShell() {
           >
             <CheckSquare className="h-5 w-5" />
             <span>Tasks</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/habits')}
+            aria-current={!isSettingsRoute && activeTab === 'habits' ? 'page' : undefined}
+            className={cn(
+              'flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors',
+              !isSettingsRoute && activeTab === 'habits'
+                ? 'text-[#8AB8A3]'
+                : 'text-[#7E8B85]',
+            )}
+          >
+            <Repeat className="h-5 w-5" />
+            <span>Habits</span>
           </button>
         </div>
       </nav>

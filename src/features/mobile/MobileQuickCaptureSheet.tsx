@@ -44,6 +44,7 @@ export function MobileQuickCaptureSheet({
   // Quick Note fields
   const [noteTitle, setNoteTitle] = useState('');
   const [noteBody, setNoteBody] = useState('');
+  const [noteType, setNoteType] = useState<'markdown' | 'text'>('markdown');
 
   // Quick Task fields
   const [taskTitle, setTaskTitle] = useState('');
@@ -64,6 +65,7 @@ export function MobileQuickCaptureSheet({
   const resetFields = () => {
     setNoteTitle('');
     setNoteBody('');
+    setNoteType('markdown');
     setTaskTitle('');
     setTaskGroup('');
     setScheduleChoice('today');
@@ -92,6 +94,7 @@ export function MobileQuickCaptureSheet({
       const created = await createNote({
         title: derivedTitle,
         content: trimmedBody,
+        type: noteType,
         folderId: inboxFolder?.id ?? null,
       });
       resetFields();
@@ -192,6 +195,29 @@ export function MobileQuickCaptureSheet({
 
         {mode === 'note' ? (
           <div className="space-y-3">
+            <div className="flex items-center gap-1.5">
+              {(
+                [
+                  { id: 'markdown', label: 'Markdown (.md)' },
+                  { id: 'text', label: 'Text (.txt)' },
+                ] as const
+              ).map((kind) => (
+                <button
+                  key={kind.id}
+                  type="button"
+                  onClick={() => setNoteType(kind.id)}
+                  aria-pressed={noteType === kind.id}
+                  className={cn(
+                    'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                    noteType === kind.id
+                      ? 'border-[#8AB8A3]/45 bg-[#18221E] text-[#8AB8A3]'
+                      : 'border-[#1E2623] bg-[#0D1210] text-[#7E8B85]',
+                  )}
+                >
+                  {kind.label}
+                </button>
+              ))}
+            </div>
             <input
               type="text"
               value={noteTitle}
